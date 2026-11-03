@@ -18,11 +18,11 @@ An automated crypto trading bot with strict risk controls. You test a strategy o
   - **Kill switch**: at -15% from peak equity it closes everything and halts until you reset it manually.
 - **Realistic backtester**: fees, slippage, gaps through stops, and the stop assumed to hit first when a candle touches both stop and target. There's no look-ahead (a test checks this). Results are compared with buy & hold.
 - **Walk-forward optimiser**: tunes parameters on the first 70% of history, then shows how they did on the unseen 30%.
-- **Paper and live trading** on 100+ exchanges through [ccxt](https://github.com/ccxt/ccxt): Binance, Kraken, Bybit, OKX, Coinbase, KuCoin and more.
+- **Paper and live trading** on 100+ crypto exchanges through [ccxt](https://github.com/ccxt/ccxt) (Binance, Kraken, Bybit, OKX, Coinbase, KuCoin and more), **and on MetaTrader 5 brokers such as XM, for gold, forex and other CFDs**. See [Trading gold on XM](#trading-gold-on-xm-metatrader-5).
 - **Crash-safe**: state is saved after every step and restored on restart. It retries network errors with backoff.
 - **Telegram alerts** (optional) for every trade and kill-switch event.
 
-It trades **spot only and long only**: no leverage, no shorting, no futures.
+It trades **long only (buys, never sells short)**. On crypto exchanges it trades spot with no leverage. On MT5 it trades CFDs; position size is still set by the stop-loss and your risk %.
 
 ## Setup
 
@@ -82,6 +82,43 @@ Start with a small balance in that exchange account. The bot sizes trades from t
 
 **Important:** stop-losses are managed by the bot, not placed on the exchange. **Keep the bot running whenever positions are open.** Run it on a small always-on server (a VPS) using `tmux`, `screen`, or a systemd service.
 
+## Trading gold on XM (MetaTrader 5)
+
+The bot drives the MetaTrader 5 desktop terminal through MetaQuotes' official Python package. This **only works on Windows** and needs an XM **MT5** account. XM MT4 accounts are not supported, so open an MT5 account (demo or real) in the XM Members Area if you only have MT4.
+
+### Setup (once)
+
+1. Install **MetaTrader 5 from XM** and log in to your XM MT5 account. Start with a **demo** account.
+2. In MT5, click the **Algo Trading** button in the toolbar so it turns green.
+3. Optional, for long backtests: go to *Tools → Options → Charts* and set **Max bars in chart** to *Unlimited*, then restart MT5.
+4. In the bot folder:
+
+```bash
+pip install -r requirements.txt
+copy config.gold-xm.yaml config.yaml
+```
+
+5. Optionally, put your MT5 login in `.env` (`MT5_LOGIN`, `MT5_PASSWORD`, `MT5_SERVER`, e.g. `XMGlobal-MT5 2`). If you leave these empty, the bot uses whatever account is logged in to the open terminal.
+
+### Run it
+
+```bash
+python main.py backtest --plot      # uses gold history from your MT5 terminal
+python main.py optimise
+python main.py paper                # live XM gold prices, simulated money
+python main.py live --confirm-live  # after setting live_enabled: true (use a DEMO account first)
+```
+
+Keep MT5 open while the bot runs. **Run `live` on an XM demo account first.** It places real orders on the demo server, so you can see exactly how the bot behaves.
+
+### How it differs from crypto
+
+- **Stops live on XM's server.** Every order is sent with its stop-loss and take-profit attached, and the trailing stop is moved on the server as price rises. Positions stay protected even if your PC or the bot goes offline. When the server closes a position, the bot detects it and records the trade.
+- **Orders are tagged.** The bot only manages positions it opened, identified by the `magic` number in the config. Your manual trades in the same account are left alone.
+- **Lot sizes:** the bot reads the contract size, minimum lot and lot step from XM (for example 1 lot of GOLD = 100 oz, minimum 0.01 lot = 1 oz). It always rounds **down**. If 1% risk works out to less than the minimum lot, it **skips the trade** rather than risking more than you set. In practice that means you need roughly **$3,000–5,000** for 1% risk on 1-hour gold, and less on a lower timeframe or at a higher risk %. The log tells you when a trade was skipped for this reason.
+- **Costs:** the spread is modelled with `slippage_pct`. **Overnight swap** charges are *not* included in backtests, so long-held positions will cost a bit more in reality.
+- **Weekends:** gold closes from Friday night to Sunday night. Prices can gap at the open, and a stop-loss then fills at the gap price, not the stop level. The backtester models these gaps.
+
 ## Commands
 
 | Command | What it does |
@@ -110,6 +147,8 @@ bot/risk.py          sizing, stops, daily limit, kill switch
 bot/trader.py        shared trading logic used by backtest AND live
 bot/backtest.py      backtester, metrics, walk-forward optimiser
 bot/broker.py        simulated and live (ccxt) order execution
+bot/mt5.py           MetaTrader 5 data + orders (XM, gold, forex)
+config.gold-xm.yaml  ready-made config for gold on XM
 bot/engine.py        paper/live loop with state persistence
 bot/data.py          candle download, caching, synthetic data
 tests/               pytest suite (run: python -m pytest)

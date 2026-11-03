@@ -5,3 +5,4 @@ PyYAML>=6.0
 python-dotenv>=1.0
 matplotlib>=3.8
 pytest>=8.0
+MetaTrader5>=5.0.45; sys_platform == "win32"

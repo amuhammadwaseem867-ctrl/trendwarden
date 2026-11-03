@@ -79,8 +79,13 @@ def compute_metrics(equity: pd.Series, trades: pd.DataFrame, timeframe: str, sta
     if equity.empty:
         return {"trades": 0}
     rets = equity.pct_change().dropna()
-    ppy = periods_per_year(timeframe)
-    years = max(len(equity) / ppy, 1e-9)
+    span_years = (equity.index[-1] - equity.index[0]).total_seconds() / (365.25 * 86400)
+    if span_years > 0.05:
+        years = span_years
+        ppy = len(equity) / span_years  # actual bars per year (markets with weekends/closures)
+    else:
+        ppy = periods_per_year(timeframe)
+        years = max(len(equity) / ppy, 1e-9)
     final = float(equity.iloc[-1])
     total = final / starting_cash - 1
     std = rets.std(ddof=1)

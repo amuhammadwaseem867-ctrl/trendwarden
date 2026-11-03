@@ -33,6 +33,25 @@ def make_exchange(name: str, testnet: bool = False, api_key: str | None = None,
     return ex
 
 
+def make_market(cfg, auth: bool = False):
+    """Market-data/exchange object for the configured platform.
+    `auth=True` logs in with credentials from the environment (needed for live)."""
+    import os
+
+    if cfg.platform == "mt5":
+        from .mt5 import MT5Market, connect
+
+        mt5 = connect(cfg.mt5.get("path"), os.getenv("MT5_LOGIN"), os.getenv("MT5_PASSWORD"),
+                      os.getenv("MT5_SERVER"))
+        return MT5Market(mt5, cfg.symbols)
+    if auth:
+        key, secret = os.getenv("EXCHANGE_API_KEY"), os.getenv("EXCHANGE_API_SECRET")
+        if not (key and secret):
+            raise SystemExit("Live mode needs EXCHANGE_API_KEY and EXCHANGE_API_SECRET in .env")
+        return make_exchange(cfg.exchange, cfg.testnet, key, secret, os.getenv("EXCHANGE_API_PASSWORD"))
+    return make_exchange(cfg.exchange, cfg.testnet)
+
+
 def to_frame(rows: list[list]) -> pd.DataFrame:
     df = pd.DataFrame(rows, columns=COLUMNS)
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)

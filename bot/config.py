@@ -28,6 +28,7 @@ class ExecutionConfig:
 
 @dataclass
 class Config:
+    platform: str = "ccxt"        # ccxt (crypto exchanges) | mt5 (MetaTrader 5: XM, gold, forex)
     exchange: str = "binance"
     testnet: bool = False
     symbols: list[str] = field(default_factory=lambda: ["BTC/USDT"])
@@ -39,12 +40,15 @@ class Config:
     execution: ExecutionConfig = field(default_factory=ExecutionConfig)
     state_dir: str = "state"
     live_enabled: bool = False
+    mt5: dict = field(default_factory=dict)  # path, magic, deviation
 
     def strategy(self):
         return build_strategy(self.strategy_name, self.strategy_params)
 
     @property
     def quote_currency(self) -> str:
+        if self.platform == "mt5":
+            return "account currency"
         quotes = {s.split("/")[1].split(":")[0] for s in self.symbols}
         if len(quotes) != 1:
             raise ValueError(f"All symbols must share one quote currency, got {sorted(quotes)}")
@@ -59,7 +63,11 @@ def load_config(path: str | Path) -> Config:
     if unknown_exe:
         raise ValueError(f"Unknown execution settings: {sorted(unknown_exe)}")
 
+    platform = raw.get("platform", "ccxt")
+    if platform not in ("ccxt", "mt5"):
+        raise ValueError("platform must be 'ccxt' or 'mt5'")
     cfg = Config(
+        platform=platform,
         exchange=raw.get("exchange", "binance"),
         testnet=bool(raw.get("testnet", False)),
         symbols=list(raw.get("symbols", ["BTC/USDT"])),
@@ -71,6 +79,7 @@ def load_config(path: str | Path) -> Config:
         execution=ExecutionConfig(**exe),
         state_dir=raw.get("state_dir", "state"),
         live_enabled=bool(raw.get("live_enabled", False)),
+        mt5=raw.get("mt5", {}) or {},
     )
     if not cfg.symbols:
         raise ValueError("At least one symbol is required")

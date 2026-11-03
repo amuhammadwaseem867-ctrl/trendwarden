@@ -41,6 +41,8 @@ class Trader:
 
     # ----- accounting ----------------------------------------------------
     def equity(self, prices: dict[str, float]) -> float:
+        if hasattr(self.broker, "account_equity"):  # margin accounts (MT5) report equity directly
+            return self.broker.account_equity()
         value = sum(p.qty * prices.get(s, p.entry_price) for s, p in self.positions.items())
         return self.broker.get_cash() + value
 
@@ -59,6 +61,8 @@ class Trader:
             return
         pos = self.risk.new_position(symbol, fill.qty, fill.price, atr, ts)
         self.positions[symbol] = pos
+        if hasattr(self.broker, "protect"):  # put the stop/target on the broker's server
+            self.broker.protect(symbol, pos.stop, pos.take_profit)
         self.entry_fees[symbol] = fill.fee
         msg = (f"BUY {symbol} qty={fill.qty:.6g} @ {fill.price:.6g} | stop {pos.stop:.6g}"
                + (f" | target {pos.take_profit:.6g}" if pos.take_profit else ""))
@@ -73,15 +77,26 @@ class Trader:
         if fill is None or fill.qty <= 0:
             log.error("%s %s: failed to close position (%s)", ts, symbol, reason)
             return None
+        return self._record(symbol, fill.price, fill.qty, fill.fee, ts, reason)
+
+    def record_external_close(self, symbol: str, price: float, ts: str, reason: str) -> Trade | None:
+        """The broker closed the position itself (e.g. its server-side stop hit)."""
+        pos = self.positions.get(symbol)
+        if pos is None:
+            return None
+        return self._record(symbol, price, pos.qty, 0.0, ts, reason)
+
+    def _record(self, symbol: str, price: float, qty: float, fee: float, ts: str, reason: str) -> Trade:
+        pos = self.positions[symbol]
         entry_fee = self.entry_fees.pop(symbol, 0.0)
-        pnl = (fill.price - pos.entry_price) * fill.qty - fill.fee - entry_fee
+        pnl = (price - pos.entry_price) * qty - fee - entry_fee
         risk_cash = pos.initial_risk * pos.qty
-        trade = Trade(symbol, pos.entry_time, ts, pos.entry_price, fill.price, fill.qty, pnl,
+        trade = Trade(symbol, pos.entry_time, ts, pos.entry_price, price, qty, pnl,
                       pnl / risk_cash if risk_cash else 0.0, reason)
         self.trades.append(trade)
         del self.positions[symbol]
         self.risk.record_close(symbol, pnl)
-        msg = f"SELL {symbol} @ {fill.price:.6g} ({reason}) | PnL {pnl:+.2f} ({trade.r_multiple:+.2f}R)"
+        msg = f"SELL {symbol} @ {price:.6g} ({reason}) | PnL {pnl:+.2f} ({trade.r_multiple:+.2f}R)"
         log.info("%s %s", ts, msg)
         self.notify(msg)
         return trade
@@ -105,7 +120,10 @@ class Trader:
             elif bool(bar["exit"]):
                 self.close(symbol, bar["close"], ts, "signal")
             else:
+                old_stop = pos.stop
                 self.risk.trail(pos, bar["close"], atr)
+                if pos.stop > old_stop and hasattr(self.broker, "protect"):
+                    self.broker.protect(symbol, pos.stop, pos.take_profit)
         elif bool(bar["entry"]) and atr > 0:
             self.open(symbol, bar["close"], atr, ts, prices)
 

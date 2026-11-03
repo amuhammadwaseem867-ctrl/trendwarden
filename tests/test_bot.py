@@ -1,4 +1,3 @@
-import math
 from datetime import date
 
 import numpy as np
@@ -148,7 +147,7 @@ def test_paper_engine_runs_and_resumes(tmp_path, monkeypatch, df):
     from bot import engine as eng
 
     fake = FakeExchange(df)
-    monkeypatch.setattr(eng, "make_exchange", lambda *a, **k: fake)
+    monkeypatch.setattr(eng, "make_market", lambda *a, **k: fake)
     cfg = Config(symbols=["A/USDT"], timeframe="1h", strategy_name="breakout",
                  strategy_params={"entry_period": 20, "exit_period": 10, "trend_ema": 50},
                  execution=ExecutionConfig(starting_cash=10_000), state_dir=str(tmp_path))

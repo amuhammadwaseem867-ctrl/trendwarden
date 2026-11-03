@@ -12,17 +12,16 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import signal
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
 
 from .broker import LiveBroker, SimBroker
 from .config import Config
-from .data import drop_unclosed, make_exchange, to_frame
+from .data import drop_unclosed, make_market, to_frame
 from .notify import make_notifier
 from .risk import Position, RiskManager, RiskState
 from .trader import Trader
@@ -43,14 +42,15 @@ class Engine:
         self.last_bar: dict[str, str] = {}
 
         if mode == "live":
-            key, secret = os.getenv("EXCHANGE_API_KEY"), os.getenv("EXCHANGE_API_SECRET")
-            if not (key and secret):
-                raise SystemExit("Live mode needs EXCHANGE_API_KEY and EXCHANGE_API_SECRET in .env")
-            self.exchange = make_exchange(cfg.exchange, cfg.testnet, key, secret,
-                                          os.getenv("EXCHANGE_API_PASSWORD"))
-            broker = LiveBroker(self.exchange, cfg.quote_currency, cfg.execution.fee_rate)
+            self.exchange = make_market(cfg, auth=True)
+            if cfg.platform == "mt5":
+                from .mt5 import MT5Broker
+                broker = MT5Broker(self.exchange.mt5, int(cfg.mt5.get("magic", 240611)),
+                                   int(cfg.mt5.get("deviation", 30)), cfg.execution.fee_rate)
+            else:
+                broker = LiveBroker(self.exchange, cfg.quote_currency, cfg.execution.fee_rate)
         else:
-            self.exchange = make_exchange(cfg.exchange, cfg.testnet)  # public data only
+            self.exchange = make_market(cfg)  # market data only, simulated money
             broker = SimBroker(cfg.execution.starting_cash, cfg.execution.fee_rate,
                                cfg.execution.slippage_rate)
 
@@ -111,6 +111,16 @@ class Engine:
         now = datetime.now(timezone.utc)
         ts = now.isoformat(timespec="seconds")
         prices = self._prices()
+
+        # 0) Positions the broker closed on its own (server-side stop / target hit).
+        broker = self.trader.broker
+        if hasattr(broker, "position_open"):
+            for symbol, pos in list(self.trader.positions.items()):
+                if not broker.position_open(symbol):
+                    since = datetime.fromisoformat(pos.entry_time) - timedelta(days=1)
+                    price = broker.last_exit_price(symbol, since) or pos.stop
+                    reason = "take_profit" if pos.take_profit and price >= pos.take_profit else "stop"
+                    self.trader.record_external_close(symbol, price, ts, f"{reason} (broker)")
 
         # 1) Intrabar stop / take-profit checks on live prices.
         for symbol, pos in list(self.trader.positions.items()):

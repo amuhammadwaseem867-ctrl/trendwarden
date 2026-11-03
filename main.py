@@ -44,7 +44,7 @@ def load_env() -> None:
 
 
 def get_data(cfg, args) -> dict[str, pd.DataFrame]:
-    from bot.data import fetch_history, load_csv, make_exchange, synthetic_ohlcv
+    from bot.data import fetch_history, load_csv, make_market, synthetic_ohlcv
 
     if args.synthetic:
         log.info("Using SYNTHETIC data (for demo/testing only)")
@@ -53,10 +53,11 @@ def get_data(cfg, args) -> dict[str, pd.DataFrame]:
         if len(cfg.symbols) != 1:
             raise SystemExit("--csv works with a single symbol; set one symbol in the config")
         return {cfg.symbols[0]: load_csv(args.csv)}
-    ex = make_exchange(cfg.exchange, cfg.testnet)
+    ex = make_market(cfg)
     data = {}
     for s in cfg.symbols:
-        log.info("Downloading %d days of %s %s candles from %s...", cfg.history_days, s, cfg.timeframe, cfg.exchange)
+        log.info("Downloading %d days of %s %s candles from %s...", cfg.history_days, s, cfg.timeframe,
+                 "MetaTrader 5" if cfg.platform == "mt5" else cfg.exchange)
         data[s] = fetch_history(ex, s, cfg.timeframe, cfg.history_days)
         log.info("  %d candles (%s -> %s)", len(data[s]), data[s].index[0], data[s].index[-1])
     return data
@@ -137,7 +138,8 @@ def cmd_run(cfg, args, mode: str) -> None:
             raise SystemExit("Live trading is disabled. Set `live_enabled: true` in your config first.")
         if not args.confirm_live:
             raise SystemExit("Refusing to trade real money without --confirm-live.")
-        log.warning("LIVE TRADING with real funds on %s%s", cfg.exchange, " (TESTNET)" if cfg.testnet else "")
+        venue = "MetaTrader 5" if cfg.platform == "mt5" else cfg.exchange
+        log.warning("LIVE TRADING on %s%s", venue, " (TESTNET)" if cfg.testnet else "")
     Engine(cfg, mode).run()
 
 
