@@ -226,3 +226,23 @@ def test_waits_for_mt5_to_finish_loading_history(mt5, monkeypatch):
     rows = m.fetch_ohlcv("GOLD", "1h", since=int(mt5.df.index[0].timestamp() * 1000))
     assert len(rows) == mt5.i + 1            # got everything, not just the first 50
     assert "GOLD" in m.gold_symbols()
+
+
+def test_ipc_timeout_retries_then_explains(mt5, monkeypatch):
+    import time as _time
+    from bot import mt5 as m
+    monkeypatch.setattr(_time, "sleep", lambda s: None)
+    calls = []
+
+    def init(**kw):
+        calls.append(kw)
+        return len(calls) == 2           # first attempt times out, retry works
+
+    monkeypatch.setattr(mt5, "initialize", init)
+    monkeypatch.setattr(mt5, "last_error", lambda: (-10005, "IPC timeout"))
+    monkeypatch.setattr(m, "find_terminals", lambda: [])
+    assert m.connect() is mt5 and len(calls) == 2 and calls[0]["timeout"] == 120_000
+
+    monkeypatch.setattr(mt5, "initialize", lambda **kw: False)
+    with pytest.raises(SystemExit, match="Administrator"):
+        m.connect()

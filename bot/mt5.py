@@ -101,7 +101,15 @@ def connect(path: str | None = None, login: str | None = None, password: str | N
                 errors.append(f"{candidate}: file does not exist")
                 continue
             kwargs["path"] = candidate
-        if mt5.initialize(**kwargs):
+        # Give a terminal that is still starting (or updating) time to answer.
+        kwargs["timeout"] = 120_000
+        ok = mt5.initialize(**kwargs)
+        if not ok and mt5.last_error()[0] == -10005:   # IPC timeout: try once more
+            log.info("MT5 did not answer in time (still starting?) - retrying once...")
+            import time
+            time.sleep(10)
+            ok = mt5.initialize(**kwargs)
+        if ok:
             if candidate:
                 log.info("Using MT5 terminal at %s", candidate)
             break
@@ -109,7 +117,14 @@ def connect(path: str | None = None, login: str | None = None, password: str | N
     else:
         raise SystemExit(
             "Could not connect to MetaTrader 5.\n  " + "\n  ".join(errors) + "\n\n"
-            "Fix:\n"
+            + ("'IPC timeout' means MT5 was found but did not answer. Usually:\n"
+               "  - a window is open inside MT5 (login, 'open an account', update) - close it and log in;\n"
+               "  - MT5 runs as Administrator but PowerShell does not (or the other way round) - run both\n"
+               "    the same way, normally both WITHOUT 'Run as administrator';\n"
+               "  - MT5 is still starting/updating - wait a minute and try again;\n"
+               "  - two MT5 terminals are open - close the one you don't use.\n\n"
+               if any("-10005" in e for e in errors) else "")
+            + "Fix:\n"
             "  1. Install MetaTrader 5 from XM (an MT5 account - MT4 does not work) and open it.\n"
             "  2. Find terminal64.exe: right-click the MT5 desktop shortcut > Open file location.\n"
             "  3. Put that path in config.yaml under mt5:, in single quotes, e.g.\n"
