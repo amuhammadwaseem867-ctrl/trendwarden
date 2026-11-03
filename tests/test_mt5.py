@@ -241,8 +241,12 @@ def test_ipc_timeout_retries_then_explains(mt5, monkeypatch):
     monkeypatch.setattr(mt5, "initialize", init)
     monkeypatch.setattr(mt5, "last_error", lambda: (-10005, "IPC timeout"))
     monkeypatch.setattr(m, "find_terminals", lambda: [])
-    assert m.connect() is mt5 and len(calls) == 2 and calls[0]["timeout"] == 120_000
+    assert m.connect() is mt5 and len(calls) == 2 and calls[0]["timeout"] == 30_000
 
-    monkeypatch.setattr(mt5, "initialize", lambda **kw: False)
+    calls.clear()
+    monkeypatch.setattr(mt5, "initialize", lambda **kw: calls.append(kw) or False)
+    monkeypatch.setattr(m, "find_terminals", lambda: ["a/terminal64.exe", "b/terminal64.exe"])
+    monkeypatch.setattr("os.path.exists", lambda p: True)
     with pytest.raises(SystemExit, match="Administrator"):
         m.connect()
+    assert len(calls) == 4      # 3 places tried, only ONE retry in total (not one per place)

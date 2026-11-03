@@ -94,6 +94,7 @@ def connect(path: str | None = None, login: str | None = None, password: str | N
         xm = [f for f in found if "xm" in f.lower()]
         candidates = xm + [None] + [f for f in found if f not in xm]
     errors = []
+    retried = False  # retry an IPC timeout only once in total, so a failure is reported quickly
     for candidate in candidates:
         kwargs = dict(creds)
         if candidate:
@@ -101,13 +102,13 @@ def connect(path: str | None = None, login: str | None = None, password: str | N
                 errors.append(f"{candidate}: file does not exist")
                 continue
             kwargs["path"] = candidate
-        # Give a terminal that is still starting (or updating) time to answer.
-        kwargs["timeout"] = 120_000
+        kwargs["timeout"] = 30_000   # ms; a running, logged-in terminal answers in ~1 s
+        log.info("Connecting to MetaTrader 5%s (up to 30 s)...", f" at {candidate}" if candidate else "")
         ok = mt5.initialize(**kwargs)
-        if not ok and mt5.last_error()[0] == -10005:   # IPC timeout: try once more
-            log.info("MT5 did not answer in time (still starting?) - retrying once...")
-            import time
-            time.sleep(10)
+        if not ok and mt5.last_error()[0] == -10005 and not retried:
+            # IPC timeout: MT5 may have just been launched by us and still be starting.
+            retried = True
+            log.info("MT5 did not answer yet (still starting?) - one more try...")
             ok = mt5.initialize(**kwargs)
         if ok:
             if candidate:
