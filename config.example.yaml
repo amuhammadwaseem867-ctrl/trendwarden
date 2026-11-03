@@ -1,0 +1,39 @@
+# TrendWarden configuration. Copy to config.yaml and edit.
+
+exchange: binance        # any ccxt exchange id: binance, kraken, bybit, okx, coinbase, kucoin...
+testnet: false           # true = exchange sandbox (supported by binance, bybit, okx, ...)
+symbols: [BTC/USDT, ETH/USDT]   # spot pairs; all must share one quote currency
+timeframe: 4h            # candle size: 15m, 1h, 4h, 1d ...
+history_days: 730        # how much history backtest/optimise download
+
+strategy:
+  name: trend_momentum   # trend_momentum | mean_reversion | breakout
+  params:                # leave empty to use the defaults (see bot/strategies.py)
+    fast_ema: 21
+    slow_ema: 55
+    trend_ema: 200
+    adx_min: 20
+    rsi_max_entry: 70
+
+risk:
+  risk_per_trade_pct: 1.0   # lose at most ~1% of equity if a stop is hit
+  max_position_pct: 25      # no single position larger than 25% of equity
+  max_open_positions: 3
+  max_daily_loss_pct: 3     # no new trades for the rest of the day after -3%
+  max_drawdown_pct: 15      # KILL SWITCH: close everything and halt at -15% from peak
+  atr_stop_mult: 2.0        # initial stop = entry - 2 x ATR
+  atr_trail_mult: 3.0       # trailing stop = highest close - 3 x ATR (0 disables)
+  reward_risk: 2.5          # take profit at 2.5R (0 disables, rely on trail/signal)
+  cooldown_bars: 3          # wait 3 candles after a losing trade before re-entering
+
+execution:
+  fee_pct: 0.1              # your exchange taker fee, per side
+  slippage_pct: 0.05
+  poll_seconds: 30
+  starting_cash: 10000      # backtest and paper-trading balance
+
+state_dir: state
+
+# Real-money trading stays off until you set this to true AND run
+# `python main.py live --confirm-live`. Paper trade first.
+live_enabled: false

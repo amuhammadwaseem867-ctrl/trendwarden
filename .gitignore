@@ -1,0 +1,10 @@
+.env
+config.yaml
+state/
+data/
+results/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
