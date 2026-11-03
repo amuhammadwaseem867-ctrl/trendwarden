@@ -56,6 +56,7 @@ def to_frame(rows: list[list]) -> pd.DataFrame:
     df = pd.DataFrame(rows, columns=COLUMNS)
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
     df = df.drop_duplicates("timestamp").set_index("timestamp").sort_index()
+    df.index = df.index.as_unit("ns")  # one time unit everywhere (pandas 3 varies it)
     return df.astype(float)
 
 
@@ -78,8 +79,15 @@ def fetch_history(exchange, symbol: str, timeframe: str, days: int,
         safe = symbol.replace("/", "-").replace(":", "_")
         cache = Path(cache_dir) / f"{exchange.id}_{safe}_{timeframe}.csv"
         if cache.exists():
-            cached = load_csv(cache)
-            if len(cached) and cached.index[0].value // 1_000_000 <= since + step:
+            try:
+                cached = load_csv(cache)
+            except Exception as exc:  # corrupt / old-format cache: just re-download
+                log.warning("Ignoring unreadable cache %s (%s)", cache, exc)
+                cached = None
+            if cached is not None and len(cached) and coverage(cached, timeframe) < 0.8:
+                log.info("Cached %s history has gaps - downloading it again", symbol)
+                cached = None
+            if cached is not None and len(cached) and cached.index[0].value // 1_000_000 <= since + step:
                 since = cached.index[-1].value // 1_000_000 + step
             else:
                 cached = None
@@ -98,7 +106,8 @@ def fetch_history(exchange, symbol: str, timeframe: str, days: int,
         log.debug("%s: fetched %d candles up to %s", symbol, len(rows), pd.to_datetime(cursor, unit="ms"))
         time.sleep(exchange.rateLimit / 1000)
 
-    df = to_frame(rows) if rows else pd.DataFrame(columns=COLUMNS[1:], dtype=float)
+    df = to_frame(rows) if rows else pd.DataFrame(
+        columns=COLUMNS[1:], dtype=float, index=pd.DatetimeIndex([], tz="UTC", name="timestamp").as_unit("ns"))
     if cached is not None:
         df = pd.concat([cached, df])
         df = df[~df.index.duplicated(keep="last")].sort_index()
@@ -136,11 +145,12 @@ def load_csv(path: str | Path) -> pd.DataFrame:
     df = pd.read_csv(path)
     df.columns = [c.lower() for c in df.columns]
     ts = df["timestamp"]
-    if np.issubdtype(ts.dtype, np.number):
+    if pd.api.types.is_numeric_dtype(ts):  # works with pandas 2 and 3 string columns
         df["timestamp"] = pd.to_datetime(ts, unit="ms", utc=True)
     else:
         df["timestamp"] = pd.to_datetime(ts, utc=True)
     df = df.set_index("timestamp").sort_index()
+    df.index = df.index.as_unit("ns")
     return df[["open", "high", "low", "close", "volume"]].astype(float)
 
 

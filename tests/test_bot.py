@@ -258,3 +258,33 @@ def test_coverage_detects_gaps():
     assert coverage(full.iloc[::5], "1h") < 0.3
     weekdays = full[full.index.dayofweek < 5]
     assert coverage(weekdays, "1h") > 0.95  # weekend closure is not a gap
+
+
+def test_history_cache_roundtrip_and_gappy_cache_redownloaded(tmp_path):
+    from bot.data import fetch_history, load_csv
+    full = synthetic_ohlcv(n=3000, seed=4)
+
+    class Ex:
+        id = "fake"
+        rateLimit = 0
+        calls = []
+
+        def milliseconds(self):
+            return full.index[-1].value // 1_000_000 + 3_600_000 + 1000
+
+        def fetch_ohlcv(self, symbol, tf, since=None, limit=1000):
+            self.calls.append(since)
+            ms = np.array([t.value // 1_000_000 for t in full.index])  # unit-independent
+            part = full[ms >= since].iloc[:limit]
+            return [[t.value // 1_000_000, *r] for t, r in zip(part.index, part.values.tolist())]
+
+    ex = Ex()
+    first = fetch_history(ex, "A/B", "1h", days=100, cache_dir=tmp_path)
+    cache = next(tmp_path.glob("*.csv"))
+    reloaded = load_csv(cache)                      # string timestamps under pandas 3
+    pd.testing.assert_index_equal(reloaded.index, first.index)
+
+    first.iloc[::4].to_csv(cache)                   # simulate an old gappy download
+    ex.calls.clear()
+    again = fetch_history(ex, "A/B", "1h", days=100, cache_dir=tmp_path)
+    assert len(again) == len(first)                 # gaps were refilled from the exchange
