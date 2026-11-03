@@ -185,13 +185,31 @@ class MT5Market:
         if since is None:
             rates = self.mt5.copy_rates_from_pos(symbol, tf, 0, limit)
         else:
-            start = _utc(since)
-            end = _utc(self.milliseconds() + 86_400_000)
-            rates = self.mt5.copy_rates_range(symbol, tf, start, end)
+            rates = self._range_synced(symbol, tf, _utc(since), _utc(self.milliseconds() + 86_400_000))
         if rates is None:
             raise RuntimeError(f"MT5 returned no data for {symbol} {timeframe}: {self.mt5.last_error()}")
         return [[int(r["time"]) * 1000, float(r["open"]), float(r["high"]), float(r["low"]),
                  float(r["close"]), float(r["tick_volume"])] for r in rates]
+
+    def _range_synced(self, symbol, tf, start, end, wait_s: float = 30.0):
+        """MT5 downloads older history from the broker in the background, so the
+        first request often returns only part of it. Ask again until the number
+        of candles stops growing (or `wait_s` passes)."""
+        import time
+
+        rates = self.mt5.copy_rates_range(symbol, tf, start, end)
+        deadline = time.monotonic() + wait_s
+        while rates is not None and time.monotonic() < deadline:
+            time.sleep(2)
+            again = self.mt5.copy_rates_range(symbol, tf, start, end)
+            if again is None or len(again) <= len(rates):
+                break
+            log.info("%s: MT5 still loading history (%d candles so far)...", symbol, len(again))
+            rates = again
+        return rates
+
+    def gold_symbols(self) -> list[str]:
+        return [s.name for s in (self.mt5.symbols_get("*GOLD*,*XAU*") or [])]
 
     def fetch_ticker(self, symbol: str) -> dict:
         tick = self.mt5.symbol_info_tick(symbol)

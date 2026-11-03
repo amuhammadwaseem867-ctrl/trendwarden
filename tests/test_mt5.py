@@ -206,3 +206,23 @@ def test_history_when_symbol_has_no_tick_yet(mt5, monkeypatch):
     df = fetch_history(m, "GOLD", "1h", days=10, cache_dir=None)
     assert len(df) > 100
     assert _utc(-5).year == 1970                          # never raises
+
+
+def test_waits_for_mt5_to_finish_loading_history(mt5, monkeypatch):
+    """MT5 returns partial history on the first request while it syncs."""
+    import time as _time
+    from bot.mt5 import MT5Market
+    monkeypatch.setattr(_time, "sleep", lambda s: None)
+    real = mt5.copy_rates_range
+    calls = {"n": 0}
+
+    def growing(s, tf, a, b):
+        calls["n"] += 1
+        full = real(s, tf, a, b)
+        return full[-min(len(full), 50 * calls["n"]):]   # 50, 100, 150 ... candles
+
+    monkeypatch.setattr(mt5, "copy_rates_range", growing)
+    m = MT5Market(mt5, ["GOLD"])
+    rows = m.fetch_ohlcv("GOLD", "1h", since=int(mt5.df.index[0].timestamp() * 1000))
+    assert len(rows) == mt5.i + 1            # got everything, not just the first 50
+    assert "GOLD" in m.gold_symbols()

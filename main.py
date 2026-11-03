@@ -67,6 +67,12 @@ def get_data(cfg, args) -> dict[str, pd.DataFrame]:
                         "unreliable. In MT5: Tools > Options > Charts > Max bars in chart = Unlimited, restart, "
                         "open a %s %s chart and scroll back (Home key) to load full history, then run again.",
                         s, cov * 100, s, cfg.timeframe.upper())
+            if hasattr(ex, "gold_symbols"):
+                others = [g for g in ex.gold_symbols() if g != s]
+                if others:
+                    log.warning("  Other gold symbols on this account: %s. Some trade only part of the day. "
+                                "Try one, e.g. `symbols: [%s]` in config.yaml.", ", ".join(others[:8]),
+                                "XAUUSD" if "XAUUSD" in others else others[0])
     return data
 
 
