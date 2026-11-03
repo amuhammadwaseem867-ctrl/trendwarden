@@ -207,6 +207,11 @@ class MT5Broker:
                 return p
         return None
 
+    def min_qty(self, symbol: str) -> float:
+        """Broker's minimum trade size in units (e.g. 0.01 lot x 100 oz = 1 oz of gold)."""
+        info = ensure_symbol(self.mt5, symbol)
+        return float(info.volume_min) * float(info.trade_contract_size)
+
     def position_open(self, symbol: str) -> bool:
         return self._position(symbol) is not None
 
@@ -249,6 +254,14 @@ class MT5Broker:
                         symbol, qty / info.trade_contract_size, info.volume_min)
             return None
         tick = self.mt5.symbol_info_tick(symbol)
+        calc = getattr(self.mt5, "order_calc_margin", None)
+        if calc is not None:
+            margin = calc(self.mt5.ORDER_TYPE_BUY, symbol, lots, tick.ask)
+            free = float(self.mt5.account_info().margin_free)
+            if margin is not None and margin > free * 0.9:  # keep a 10% buffer
+                log.warning("%s: not enough free margin for %s lots (needs %.2f, free %.2f) - trade skipped",
+                            symbol, lots, margin, free)
+                return None
         req = {
             "action": self.mt5.TRADE_ACTION_DEAL, "symbol": symbol, "volume": lots,
             "type": self.mt5.ORDER_TYPE_BUY, "price": tick.ask, "deviation": self.deviation,

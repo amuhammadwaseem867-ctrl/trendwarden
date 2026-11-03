@@ -1,0 +1,56 @@
+# TrendWarden - GOLD on XM for SMALL accounts (around $50-$500).
+# Copy to config.yaml:   copy config.gold-small.yaml config.yaml   (Windows)
+#
+# READ THIS: on a small account the smallest gold trade (0.01 lot = 1 oz)
+# usually risks several % of your balance per trade - far more than the 1%
+# professionals use. This config allows that, up to a hard ceiling
+# (min_lot_max_risk_pct), and skips any trade that would risk more.
+# A run of losses can still take a large part of the account. Test on an XM
+# demo account with the same balance first.
+
+platform: mt5
+symbols: [GOLD]
+timeframe: 15m           # shorter candles = tighter stops = smaller loss per ounce
+history_days: 180
+
+strategy:
+  name: trend_momentum
+  params:
+    fast_ema: 21
+    slow_ema: 55
+    trend_ema: 200
+    adx_min: 20
+    rsi_max_entry: 70
+
+risk:
+  risk_per_trade_pct: 2.0     # normal sizing target
+  min_lot_max_risk_pct: 10    # SMALL-ACCOUNT MODE: if the minimum trade (1 oz) is bigger
+                              # than the normal size, take it only if one loss costs
+                              # <= 10% of the balance. Otherwise skip the trade.
+                              # Lower = safer but fewer trades. Never set above 15.
+  max_position_pct: 100000    # position value isn't the limit here - the stop and margin are
+  max_open_positions: 1       # one trade at a time
+  max_daily_loss_pct: 20      # stop for the day after losing 20%
+  max_drawdown_pct: 40        # KILL SWITCH: halt after a 40% fall from the peak
+  atr_stop_mult: 1.5          # tighter stop so the minimum trade fits more often
+  atr_trail_mult: 2.5
+  reward_risk: 2.0
+  cooldown_bars: 4
+
+execution:
+  fee_pct: 0
+  slippage_pct: 0.02          # spread + slippage
+  poll_seconds: 10
+  starting_cash: 80           # backtest/paper balance - set to what you will deposit
+  # Backtest/paper simulation of XM gold (live trading reads the real values from XM):
+  leverage: 100               # margin needed = position value / leverage
+  min_qty: 1                  # 0.01 lot = 1 oz
+  qty_step: 1
+
+mt5:
+  # path: 'C:\Program Files\XM Global MT5\terminal64.exe'
+  magic: 240611
+  deviation: 30
+
+state_dir: state
+live_enabled: false

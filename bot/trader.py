@@ -41,8 +41,10 @@ class Trader:
 
     # ----- accounting ----------------------------------------------------
     def equity(self, prices: dict[str, float]) -> float:
-        if hasattr(self.broker, "account_equity"):  # margin accounts (MT5) report equity directly
+        if hasattr(self.broker, "account_equity"):  # live margin accounts (MT5) report equity directly
             return self.broker.account_equity()
+        if hasattr(self.broker, "equity_at"):
+            return self.broker.equity_at(prices)
         value = sum(p.qty * prices.get(s, p.entry_price) for s, p in self.positions.items())
         return self.broker.get_cash() + value
 
@@ -53,7 +55,21 @@ class Trader:
         if not ok:
             log.info("%s %s: entry signal skipped (%s)", ts, symbol, why)
             return
-        qty = self.risk.size(equity, self.broker.get_cash(), price, atr, self.broker.fee_rate)
+        fee_rate = self.broker.fee_rate
+        qty = self.risk.size(equity, self.broker.get_cash(), price, atr, fee_rate)
+        min_qty = self.broker.min_qty(symbol) if hasattr(self.broker, "min_qty") else 0.0
+        if min_qty and qty < min_qty:
+            # Too small for the broker's minimum trade size (typical for small accounts).
+            risk = self.risk.risk_pct(min_qty, equity, price, atr, fee_rate)
+            cap = self.risk.cfg.min_lot_max_risk_pct
+            if cap > 0 and risk <= cap:
+                log.warning("%s %s: small account - using the minimum trade size; this trade risks %.1f%% "
+                            "of equity (limit %.1f%%)", ts, symbol, risk, cap)
+                qty = min_qty
+            else:
+                log.info("%s %s: entry skipped - the minimum trade size would risk %.1f%% of equity "
+                         "(allowed: %s)", ts, symbol, risk, f"{cap}%" if cap > 0 else "min_lot_max_risk_pct is off")
+                return
         if qty <= 0:
             return
         fill = self.broker.buy(symbol, qty, price)

@@ -16,6 +16,10 @@ class ExecutionConfig:
     slippage_pct: float = 0.05    # assumed adverse slippage per fill, in percent
     poll_seconds: int = 30        # live/paper: how often to check prices
     starting_cash: float = 10_000 # backtest/paper starting balance (quote currency)
+    # Backtest/paper only (live MT5 reads these from the broker):
+    leverage: float = 1.0         # 1 = cash account (crypto spot); >1 = margin/CFD account
+    min_qty: float = 0.0          # broker's minimum trade size in units (gold: 1 oz = 0.01 lot)
+    qty_step: float = 0.0         # size increment in units (gold: 1 oz)
 
     @property
     def fee_rate(self) -> float:

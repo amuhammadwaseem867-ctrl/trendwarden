@@ -182,3 +182,14 @@ def test_connect_tries_found_terminals_and_explains_failure(mt5, monkeypatch, tm
     monkeypatch.setattr(m, "find_terminals", lambda: [])
     with pytest.raises(SystemExit, match="terminal64.exe"):
         m.connect()
+
+
+def test_min_qty_and_margin_check(mt5):
+    from bot.mt5 import MT5Broker
+    b = MT5Broker(mt5)
+    assert b.min_qty("GOLD") == pytest.approx(1.0)          # 0.01 lot x 100 oz
+    mt5.order_calc_margin = lambda t, s, lots, px: lots * 100 * px / 500
+    mt5.equity = 80
+    assert b.buy("GOLD", 1, 2400) is not None               # needs $4.80 margin
+    mt5.positions.clear()
+    assert b.buy("GOLD", 50, 2400) is None                  # needs $240 margin, only $80

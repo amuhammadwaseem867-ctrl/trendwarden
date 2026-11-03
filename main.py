@@ -63,12 +63,18 @@ def get_data(cfg, args) -> dict[str, pd.DataFrame]:
     return data
 
 
+def sim_kwargs(cfg) -> dict:
+    x = cfg.execution
+    return dict(starting_cash=x.starting_cash, fee_rate=x.fee_rate, slippage_rate=x.slippage_rate,
+                leverage=x.leverage, min_qty=x.min_qty, qty_step=x.qty_step)
+
+
 def cmd_backtest(cfg, args) -> None:
     from bot.backtest import run_backtest
 
     data = get_data(cfg, args)
     res = run_backtest(data, cfg.strategy_name, cfg.strategy_params, cfg.risk, cfg.timeframe,
-                       cfg.execution.starting_cash, cfg.execution.fee_rate, cfg.execution.slippage_rate)
+                       **sim_kwargs(cfg))
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     res.equity.to_csv(out / "equity.csv")
@@ -119,8 +125,7 @@ def cmd_optimise(cfg, args) -> None:
     data = get_data(cfg, args)
     report = optimise(data, cfg.strategy_name, grid, cfg.strategy_params, cfg.risk, cfg.timeframe,
                       train_frac=args.train, min_trades=args.min_trades,
-                      starting_cash=cfg.execution.starting_cash, fee_rate=cfg.execution.fee_rate,
-                      slippage_rate=cfg.execution.slippage_rate)
+                      **sim_kwargs(cfg))
     if report.empty:
         print("No parameter set produced enough trades. Try more history or a lower --min-trades.")
         return

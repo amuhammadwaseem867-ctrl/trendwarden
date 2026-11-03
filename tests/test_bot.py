@@ -167,3 +167,46 @@ def test_paper_engine_runs_and_resumes(tmp_path, monkeypatch, df):
     assert e2.trader.broker.cash == pytest.approx(e.trader.broker.cash)
     assert set(e2.trader.positions) == set(e.trader.positions)
     assert e2.last_bar == e.last_bar
+
+
+# ---------------------------------------------------------------- small accounts / margin
+def test_margin_broker_accounting():
+    b = SimBroker(80, fee_rate=0.0, slippage_rate=0.0, leverage=100, min_qty=1, qty_step=1)
+    f = b.buy("GOLD", 1.7, 2400)              # rounds down to 1 oz; margin 24
+    assert f.qty == 1 and b.cash == 80
+    assert b.equity_at({"GOLD": 2390}) == pytest.approx(70)
+    assert b.buy("GOLD", 3, 2400) is None      # would need 72 more margin, only 56 free
+    b.sell("GOLD", 1, 2410)
+    assert b.cash == pytest.approx(90) and not b.holdings
+    assert SimBroker(80, 0, 0, leverage=20).buy("GOLD", 1, 2400) is None  # margin 120 > 80
+
+
+def _small_trader(cap):
+    from bot.trader import Trader
+    broker = SimBroker(80, fee_rate=0.0, slippage_rate=0.0, leverage=100, min_qty=1, qty_step=1)
+    return Trader(broker, RiskManager(RiskConfig(risk_per_trade_pct=2, min_lot_max_risk_pct=cap)))
+
+
+def test_small_account_uses_minimum_size_within_cap():
+    t = _small_trader(cap=10)
+    t.open("GOLD", 2400, atr=3, ts="t", prices={"GOLD": 2400})   # 1 oz x $6 stop = 7.5% of $80
+    assert t.positions["GOLD"].qty == 1
+
+
+@pytest.mark.parametrize("cap", [0, 5])
+def test_small_account_skips_when_minimum_too_risky(cap):
+    t = _small_trader(cap)
+    t.open("GOLD", 2400, atr=3, ts="t", prices={"GOLD": 2400})
+    assert not t.positions
+
+
+def test_small_account_backtest_accounts_cleanly():
+    gold = synthetic_ohlcv(n=3000, seed=11, start_price=300, freq="15m")  # calmer than synthetic 2400
+    res = run_backtest({"GOLD": gold}, "trend_momentum", {},
+                       RiskConfig(risk_per_trade_pct=2, min_lot_max_risk_pct=10, atr_stop_mult=1.5,
+                                  max_drawdown_pct=90, max_daily_loss_pct=90),
+                       "15m", starting_cash=80, fee_rate=0, slippage_rate=0.0002,
+                       leverage=100, min_qty=1, qty_step=1)
+    assert res.metrics["trades"] > 0
+    assert (res.trades.qty == res.trades.qty.round()).all()          # whole ounces only
+    assert res.metrics["final_equity"] == pytest.approx(80 + res.trades.pnl.sum(), abs=0.01)

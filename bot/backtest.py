@@ -29,7 +29,8 @@ class BacktestResult:
 def run_backtest(data: dict[str, pd.DataFrame], strategy_name: str, strategy_params: dict,
                  risk_cfg: RiskConfig, timeframe: str, starting_cash: float = 10_000,
                  fee_rate: float = 0.001, slippage_rate: float = 0.0005,
-                 start: pd.Timestamp | None = None, end: pd.Timestamp | None = None) -> BacktestResult:
+                 start: pd.Timestamp | None = None, end: pd.Timestamp | None = None,
+                 leverage: float = 1.0, min_qty: float = 0.0, qty_step: float = 0.0) -> BacktestResult:
     """Simulate the strategy bar by bar.
 
     Signals are computed on the full history (they only use past data), and
@@ -44,7 +45,7 @@ def run_backtest(data: dict[str, pd.DataFrame], strategy_name: str, strategy_par
     if end is not None:
         timeline = [t for t in timeline if t < end]
 
-    broker = SimBroker(starting_cash, fee_rate, slippage_rate)
+    broker = SimBroker(starting_cash, fee_rate, slippage_rate, leverage, min_qty, qty_step)
     trader = Trader(broker, RiskManager(risk_cfg))
     prices: dict[str, float] = {}
     curve = []

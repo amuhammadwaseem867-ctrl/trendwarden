@@ -143,7 +143,7 @@ def synthetic_ohlcv(n: int = 3000, seed: int = 7, start_price: float = 100.0,
     spread = np.abs(rng.normal(0, 0.004, n)) * close
     high = np.maximum(open_, close) + spread
     low = np.minimum(open_, close) - spread
-    idx = pd.date_range("2024-01-01", periods=n, freq=freq.replace("m", "min"), tz="UTC")
+    idx = pd.date_range("2024-01-01", periods=n, freq=freq[:-1] + "min" if freq.endswith("m") else freq, tz="UTC")
     return pd.DataFrame(
         {"open": open_, "high": high, "low": low, "close": close, "volume": rng.uniform(10, 100, n)},
         index=idx,

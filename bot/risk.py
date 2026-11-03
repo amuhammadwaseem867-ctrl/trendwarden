@@ -20,6 +20,10 @@ class RiskConfig:
     atr_trail_mult: float = 3.0          # trailing stop = highest close - mult * ATR (0 = off)
     reward_risk: float = 2.5             # take profit at R multiple (0 = off)
     cooldown_bars: int = 3               # bars to wait after a losing trade on a symbol
+    # Small accounts: if the risk-based size is below the broker's minimum
+    # trade size, trade the minimum anyway - but only if one loss would cost no
+    # more than this % of equity. 0 = off (skip such trades).
+    min_lot_max_risk_pct: float = 0.0
 
     @classmethod
     def from_dict(cls, d: dict | None) -> "RiskConfig":
@@ -123,13 +127,17 @@ class RiskManager:
         """Quantity such that hitting the stop loses ~risk_per_trade_pct of equity."""
         if not (atr > 0 and price > 0 and math.isfinite(atr)):
             return 0.0
-        stop_dist = self.cfg.atr_stop_mult * atr
         risk_cash = equity * self.cfg.risk_per_trade_pct / 100
-        # Include round-trip fees in the per-unit loss.
-        per_unit_loss = stop_dist + 2 * fee_rate * price
-        qty = risk_cash / per_unit_loss
+        qty = risk_cash / self.loss_per_unit(price, atr, fee_rate)
         max_notional = min(equity * self.cfg.max_position_pct / 100, cash / (1 + fee_rate))
         return max(0.0, min(qty, max_notional / price))
+
+    def loss_per_unit(self, price: float, atr: float, fee_rate: float) -> float:
+        """Loss per unit if the initial stop is hit, including round-trip fees."""
+        return self.cfg.atr_stop_mult * atr + 2 * fee_rate * price
+
+    def risk_pct(self, qty: float, equity: float, price: float, atr: float, fee_rate: float) -> float:
+        return qty * self.loss_per_unit(price, atr, fee_rate) / equity * 100 if equity > 0 else math.inf
 
     def new_position(self, symbol: str, qty: float, fill: float, atr: float, ts: str) -> Position:
         dist = self.cfg.atr_stop_mult * atr

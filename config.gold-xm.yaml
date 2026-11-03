@@ -34,6 +34,9 @@ execution:
   slippage_pct: 0.02        # models the gold spread + slippage per fill
   poll_seconds: 15
   starting_cash: 10000      # backtest/paper balance
+  leverage: 100             # backtest/paper simulation of XM gold margin
+  min_qty: 1                # 0.01 lot = 1 oz
+  qty_step: 1
 
 mt5:
   # Only needed if the bot can't find MT5 itself. Use SINGLE quotes:

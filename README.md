@@ -115,9 +115,24 @@ Keep MT5 open while the bot runs. **Run `live` on an XM demo account first.** It
 
 - **Stops live on XM's server.** Every order is sent with its stop-loss and take-profit attached, and the trailing stop is moved on the server as price rises. Positions stay protected even if your PC or the bot goes offline. When the server closes a position, the bot detects it and records the trade.
 - **Orders are tagged.** The bot only manages positions it opened, identified by the `magic` number in the config. Your manual trades in the same account are left alone.
-- **Lot sizes:** the bot reads the contract size, minimum lot and lot step from XM (for example 1 lot of GOLD = 100 oz, minimum 0.01 lot = 1 oz). It always rounds **down**. If 1% risk works out to less than the minimum lot, it **skips the trade** rather than risking more than you set. In practice that means you need roughly **$3,000–5,000** for 1% risk on 1-hour gold, and less on a lower timeframe or at a higher risk %. The log tells you when a trade was skipped for this reason.
+- **Lot sizes:** the bot reads the contract size, minimum lot and lot step from XM (for example 1 lot of GOLD = 100 oz, minimum 0.01 lot = 1 oz). It always rounds **down** and checks your free margin before each order. If your risk % works out to less than the minimum lot, it skips the trade, unless you turn on small-account mode (below).
 - **Costs:** the spread is modelled with `slippage_pct`. **Overnight swap** charges are *not* included in backtests, so long-held positions will cost a bit more in reality.
 - **Weekends:** gold closes from Friday night to Sunday night. Prices can gap at the open, and a stop-loss then fills at the gap price, not the stop level. The backtester models these gaps.
+
+### Small accounts (from about $50)
+
+With a small balance, even the smallest gold trade (1 oz) risks more than 1–2% per trade. `config.gold-small.yaml` turns on **small-account mode**:
+
+```bash
+copy config.gold-small.yaml config.yaml
+```
+
+- `min_lot_max_risk_pct: 10`: when the normal size is below the minimum, the bot trades the minimum **only if one loss would cost no more than 10% of your balance**. Otherwise it skips the trade and logs why. Lower it for safety; don't go above 15.
+- It uses 15-minute candles and a tighter stop (1.5× ATR) so more trades fit under that ceiling. It holds one trade at a time.
+- The kill switch is set to 40% from peak, and the daily limit to 20%.
+- `starting_cash`, `leverage`, `min_qty` and `qty_step` make backtests and paper trading simulate a small XM gold account. Live trading reads the real values from XM.
+
+On an $80 account, one loss can cost up to $8, and a losing streak can halve the account. Try it with `paper` mode and on an XM demo account set to the same balance before using real money.
 
 ## Commands
 
@@ -149,6 +164,7 @@ bot/backtest.py      backtester, metrics, walk-forward optimiser
 bot/broker.py        simulated and live (ccxt) order execution
 bot/mt5.py           MetaTrader 5 data + orders (XM, gold, forex)
 config.gold-xm.yaml  ready-made config for gold on XM
+config.gold-small.yaml  gold on XM for small accounts
 bot/engine.py        paper/live loop with state persistence
 bot/data.py          candle download, caching, synthetic data
 tests/               pytest suite (run: python -m pytest)

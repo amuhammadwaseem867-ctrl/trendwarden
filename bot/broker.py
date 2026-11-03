@@ -9,6 +9,7 @@ one it is talking to.
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 
 log = logging.getLogger(__name__)
@@ -22,23 +23,71 @@ class Fill:
 
 
 class SimBroker:
-    def __init__(self, cash: float, fee_rate: float, slippage_rate: float):
+    """Simulated broker.
+
+    * leverage == 1: cash account (crypto spot) - buying costs the full price.
+    * leverage > 1:  margin/CFD account (e.g. gold on MT5) - buying only ties up
+      margin (value / leverage); profit or loss is settled when the trade closes.
+    `min_qty` / `qty_step` mimic the broker's minimum and step size (in units,
+    e.g. ounces of gold: 0.01 lot of GOLD = 1 oz).
+    """
+
+    def __init__(self, cash: float, fee_rate: float, slippage_rate: float,
+                 leverage: float = 1.0, min_qty: float = 0.0, qty_step: float = 0.0):
         self.cash = float(cash)
         self.fee_rate = fee_rate
         self.slippage_rate = slippage_rate
+        self.leverage = max(1.0, float(leverage))
+        self.min_qty_units = float(min_qty)
+        self.qty_step = float(qty_step)
         self.holdings: dict[str, float] = {}
+        self.avg_price: dict[str, float] = {}
+
+    @property
+    def margin_mode(self) -> bool:
+        return self.leverage > 1
+
+    def min_qty(self, symbol: str) -> float:
+        return self.min_qty_units
+
+    def _round(self, qty: float) -> float:
+        if self.qty_step > 0:
+            qty = math.floor(qty / self.qty_step + 1e-9) * self.qty_step
+        return qty
+
+    def used_margin(self) -> float:
+        return sum(q * self.avg_price[s] for s, q in self.holdings.items()) / self.leverage
 
     def get_cash(self) -> float:
+        """Spot: cash. Margin: buying power (free margin x leverage)."""
+        if self.margin_mode:
+            return max(0.0, self.cash - self.used_margin()) * self.leverage
         return self.cash
 
+    def equity_at(self, prices: dict[str, float]) -> float:
+        if self.margin_mode:
+            return self.cash + sum(q * (prices.get(s, self.avg_price[s]) - self.avg_price[s])
+                                   for s, q in self.holdings.items())
+        return self.cash + sum(q * prices.get(s, self.avg_price[s]) for s, q in self.holdings.items())
+
     def buy(self, symbol: str, qty: float, price: float) -> Fill | None:
-        fill_price = price * (1 + self.slippage_rate)
-        cost = qty * fill_price
-        fee = cost * self.fee_rate
-        if qty <= 0 or cost + fee > self.cash + 1e-9:
+        qty = self._round(qty)
+        if qty <= 0 or qty < self.min_qty_units - 1e-12:
             return None
-        self.cash -= cost + fee
-        self.holdings[symbol] = self.holdings.get(symbol, 0.0) + qty
+        fill_price = price * (1 + self.slippage_rate)
+        value = qty * fill_price
+        fee = value * self.fee_rate
+        if self.margin_mode:
+            if value / self.leverage + fee > self.cash - self.used_margin() + 1e-9:
+                return None  # not enough free margin
+            self.cash -= fee
+        else:
+            if value + fee > self.cash + 1e-9:
+                return None
+            self.cash -= value + fee
+        held = self.holdings.get(symbol, 0.0)
+        self.avg_price[symbol] = (held * self.avg_price.get(symbol, 0.0) + value) / (held + qty)
+        self.holdings[symbol] = held + qty
         return Fill(qty, fill_price, fee)
 
     def sell(self, symbol: str, qty: float, price: float) -> Fill | None:
@@ -49,18 +98,25 @@ class SimBroker:
         fill_price = price * (1 - self.slippage_rate)
         proceeds = qty * fill_price
         fee = proceeds * self.fee_rate
-        self.cash += proceeds - fee
+        if self.margin_mode:
+            self.cash += qty * (fill_price - self.avg_price[symbol]) - fee
+        else:
+            self.cash += proceeds - fee
         self.holdings[symbol] = held - qty
         if self.holdings[symbol] <= 1e-12:
             del self.holdings[symbol]
+            del self.avg_price[symbol]
         return Fill(qty, fill_price, fee)
 
     def to_dict(self) -> dict:
-        return {"cash": self.cash, "holdings": self.holdings}
+        return {"cash": self.cash, "holdings": self.holdings, "avg_price": self.avg_price}
 
     def load(self, d: dict) -> None:
         self.cash = float(d["cash"])
         self.holdings = {k: float(v) for k, v in d.get("holdings", {}).items()}
+        self.avg_price = {k: float(v) for k, v in d.get("avg_price", {}).items()}
+        for k in self.holdings:  # state files from older versions
+            self.avg_price.setdefault(k, 0.0)
 
 
 class LiveBroker:

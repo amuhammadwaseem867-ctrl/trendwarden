@@ -51,8 +51,8 @@ class Engine:
                 broker = LiveBroker(self.exchange, cfg.quote_currency, cfg.execution.fee_rate)
         else:
             self.exchange = make_market(cfg)  # market data only, simulated money
-            broker = SimBroker(cfg.execution.starting_cash, cfg.execution.fee_rate,
-                               cfg.execution.slippage_rate)
+            x = cfg.execution
+            broker = SimBroker(x.starting_cash, x.fee_rate, x.slippage_rate, x.leverage, x.min_qty, x.qty_step)
 
         self.trader = Trader(broker, RiskManager(cfg.risk), make_notifier(f"TrendWarden {mode}"))
         self._load_state()
