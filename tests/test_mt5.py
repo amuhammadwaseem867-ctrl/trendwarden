@@ -162,3 +162,23 @@ def test_live_engine_with_mt5(mt5, tmp_path, monkeypatch):
     # exit price comes from this position's own deal (its server stop), not an older trade
     assert (broker_closed.exit_price > 100).all()
     assert (broker_closed.r_multiple.abs() < 3).all()
+
+
+def test_connect_tries_found_terminals_and_explains_failure(mt5, monkeypatch, tmp_path):
+    from bot import mt5 as m
+    exe = tmp_path / "terminal64.exe"
+    exe.write_text("")
+    tried = []
+
+    def init(**kw):
+        tried.append(kw.get("path"))
+        return kw.get("path") == str(exe)
+
+    monkeypatch.setattr(mt5, "initialize", init)
+    monkeypatch.setattr(m, "find_terminals", lambda: [str(exe)])
+    assert m.connect() is mt5
+    assert tried == [None, str(exe)]  # auto-detect first, then the found terminal
+
+    monkeypatch.setattr(m, "find_terminals", lambda: [])
+    with pytest.raises(SystemExit, match="terminal64.exe"):
+        m.connect()

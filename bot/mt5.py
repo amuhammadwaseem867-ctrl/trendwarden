@@ -42,22 +42,70 @@ def _mt5():
     return mt5
 
 
+def find_terminals() -> list[str]:
+    """Look for installed MT5 terminals (terminal64.exe) in the usual places.
+    XM installs to e.g. C:\\Program Files\\XM Global MT5\\terminal64.exe."""
+    import glob
+    import os
+
+    roots = []
+    for var in ("ProgramFiles", "ProgramW6432", "ProgramFiles(x86)", "LOCALAPPDATA", "APPDATA"):
+        if os.getenv(var):
+            roots.append(os.getenv(var))
+    for drive in "CDEF":
+        roots += [f"{drive}:\\Program Files", f"{drive}:\\Program Files (x86)", f"{drive}:\\"]
+    found: list[str] = []
+    for root in roots:
+        for pattern in ("*\\terminal64.exe", "Programs\\*\\terminal64.exe"):
+            for f in glob.glob(os.path.join(root, pattern)):
+                if f not in found:
+                    found.append(f)
+    # Prefer XM's terminal if several brokers' terminals are installed.
+    found.sort(key=lambda f: (0 if "xm" in f.lower() else 1, f))
+    return found
+
+
 def connect(path: str | None = None, login: str | None = None, password: str | None = None,
             server: str | None = None):
     """Start/attach to the MT5 terminal. If login details are omitted, the
     account already logged in to the terminal is used."""
+    import os
+
     mt5 = _mt5()
-    kwargs = {}
-    if path:
-        kwargs["path"] = path
+    creds = {}
     if login:
-        kwargs.update(login=int(login), password=password or "", server=server or "")
-    if not mt5.initialize(**kwargs):
-        raise SystemExit(f"Could not connect to MetaTrader 5: {mt5.last_error()}. "
-                         "Is the terminal installed, open and logged in?")
+        creds.update(login=int(login), password=password or "", server=server or "")
+
+    path = path or os.getenv("MT5_PATH")
+    candidates = [path] if path else [None] + find_terminals()
+    errors = []
+    for candidate in candidates:
+        kwargs = dict(creds)
+        if candidate:
+            if not os.path.exists(candidate):
+                errors.append(f"{candidate}: file does not exist")
+                continue
+            kwargs["path"] = candidate
+        if mt5.initialize(**kwargs):
+            if candidate:
+                log.info("Using MT5 terminal at %s", candidate)
+            break
+        errors.append(f"{candidate or 'auto-detect'}: {mt5.last_error()}")
+    else:
+        raise SystemExit(
+            "Could not connect to MetaTrader 5.\n  " + "\n  ".join(errors) + "\n\n"
+            "Fix:\n"
+            "  1. Install MetaTrader 5 from XM (an MT5 account - MT4 does not work) and open it.\n"
+            "  2. Find terminal64.exe: right-click the MT5 desktop shortcut > Open file location.\n"
+            "  3. Put that path in config.yaml under mt5:, in single quotes, e.g.\n"
+            "       path: 'C:\\Program Files\\XM Global MT5\\terminal64.exe'\n"
+            "     (or set MT5_PATH in .env), then run the command again.\n"
+            "  Also check you installed 64-bit Python (python -c \"import struct; print(struct.calcsize('P')*8)\" -> 64)."
+        )
     acct = mt5.account_info()
     if acct is None:
-        raise SystemExit(f"MetaTrader 5 is not logged in to an account: {mt5.last_error()}")
+        raise SystemExit(f"MetaTrader 5 is not logged in to an account: {mt5.last_error()}. "
+                         "Log in inside the terminal (File > Login to Trade Account) and retry.")
     log.info("Connected to MT5 account %s on %s (%s, leverage 1:%s, equity %.2f %s)",
              acct.login, acct.server, "DEMO" if _is_demo(mt5, acct) else "REAL",
              acct.leverage, acct.equity, acct.currency)

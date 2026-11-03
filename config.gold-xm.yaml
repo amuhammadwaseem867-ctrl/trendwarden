@@ -36,7 +36,8 @@ execution:
   starting_cash: 10000      # backtest/paper balance
 
 mt5:
-  # path: "C:\\Program Files\\XM Global MT5\\terminal64.exe"   # only if the bot can't find the terminal
+  # Only needed if the bot can't find MT5 itself. Use SINGLE quotes:
+  # path: 'C:\Program Files\XM Global MT5\terminal64.exe'
   magic: 240611             # tags the bot's orders so it never touches your manual trades
   deviation: 30             # max slippage accepted on market orders, in points
 
