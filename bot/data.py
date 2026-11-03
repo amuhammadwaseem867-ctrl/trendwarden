@@ -109,6 +109,19 @@ def fetch_history(exchange, symbol: str, timeframe: str, days: int,
     return df
 
 
+def coverage(df: pd.DataFrame, timeframe: str) -> float:
+    """Share of the expected candles that are present (1.0 = no gaps).
+    Weekends are excluded, so 24/5 markets like gold/forex score ~1.0 when complete."""
+    if len(df) < 2:
+        return 0.0
+    span_ms = (df.index[-1] - df.index[0]).total_seconds() * 1000
+    expected = span_ms / timeframe_ms(timeframe)
+    weekday_share = (df.index.dayofweek < 5).mean()
+    if weekday_share > 0.97:  # market closed at weekends
+        expected *= 5 / 7 * (23 / 24)
+    return min(1.0, len(df) / max(expected, 1))
+
+
 def drop_unclosed(df: pd.DataFrame, timeframe: str, now_ms: int) -> pd.DataFrame:
     """Remove the candle that is still forming (its close isn't final yet)."""
     if df.empty:

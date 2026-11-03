@@ -249,3 +249,12 @@ def test_walk_forward_and_discover(df):
                       RiskConfig(), "1h", folds=2, min_trades=1)
     assert {r.strategy for r in ranked} == {"supertrend", "macd_trend"}
     assert [r.robust for r in ranked] == sorted([r.robust for r in ranked], reverse=True)
+
+
+def test_coverage_detects_gaps():
+    from bot.data import coverage
+    full = synthetic_ohlcv(n=2000, seed=1)
+    assert coverage(full, "1h") > 0.95
+    assert coverage(full.iloc[::5], "1h") < 0.3
+    weekdays = full[full.index.dayofweek < 5]
+    assert coverage(weekdays, "1h") > 0.95  # weekend closure is not a gap

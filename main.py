@@ -45,7 +45,7 @@ def load_env() -> None:
 
 
 def get_data(cfg, args) -> dict[str, pd.DataFrame]:
-    from bot.data import fetch_history, load_csv, make_market, synthetic_ohlcv
+    from bot.data import coverage, fetch_history, load_csv, make_market, synthetic_ohlcv
 
     if args.synthetic:
         log.info("Using SYNTHETIC data (for demo/testing only)")
@@ -61,6 +61,12 @@ def get_data(cfg, args) -> dict[str, pd.DataFrame]:
                  "MetaTrader 5" if cfg.platform == "mt5" else cfg.exchange)
         data[s] = fetch_history(ex, s, cfg.timeframe, cfg.history_days)
         log.info("  %d candles (%s -> %s)", len(data[s]), data[s].index[0], data[s].index[-1])
+        cov = coverage(data[s], cfg.timeframe)
+        if cov < 0.8:
+            log.warning("  %s history has big GAPS: only %.0f%% of the expected candles are there. Results will be "
+                        "unreliable. In MT5: Tools > Options > Charts > Max bars in chart = Unlimited, restart, "
+                        "open a %s %s chart and scroll back (Home key) to load full history, then run again.",
+                        s, cov * 100, s, cfg.timeframe.upper())
     return data
 
 
@@ -156,8 +162,9 @@ def cmd_discover(cfg, args) -> None:
         print("\n(Synthetic data: this only shows the tool works. Run without --synthetic on real prices.)")
         return
     if not best.robust:
+        other = ", ".join(t for t in ("15m", "1h", "4h") if t != cfg.timeframe)
         print("\nNo strategy passed the robustness checks on this market/timeframe. That is useful to know:"
-              "\n- don't trade it live yet; try another timeframe (e.g. 1h or 4h) or more history,"
+              f"\n- don't trade it live; try another timeframe ({other}) or more history,"
               "\n- or keep paper trading and re-run discover later.")
         return
     raw = yaml.safe_load(Path(args.config).read_text()) or {}
