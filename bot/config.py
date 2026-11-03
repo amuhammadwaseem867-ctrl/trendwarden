@@ -62,7 +62,19 @@ class Config:
 
 
 def load_config(path: str | Path) -> Config:
-    raw = yaml.safe_load(Path(path).read_text()) or {}
+    text = Path(path).read_text(encoding="utf-8")
+    try:
+        raw = yaml.safe_load(text) or {}
+    except yaml.YAMLError as exc:
+        mark = getattr(exc, "problem_mark", None)
+        where = f" on line {mark.line + 1}" if mark else ""
+        line = text.splitlines()[mark.line].strip() if mark and mark.line < len(text.splitlines()) else ""
+        hint = ""
+        if "\\" in line and '"' in line:
+            hint = ("\nWindows paths with backslashes must use SINGLE quotes, e.g.\n"
+                    "    path: 'C:\\Program Files\\XM Global MT5\\terminal64.exe'")
+        raise SystemExit(f"{path} has a formatting mistake{where}:\n    {line}\n{exc.problem if hasattr(exc, 'problem') else exc}"
+                         f"{hint}\nAlso check that indentation uses spaces (not tabs) and lines up.") from None
     strat = raw.get("strategy", {}) or {}
     exe = raw.get("execution", {}) or {}
     unknown_exe = set(exe) - set(ExecutionConfig.__dataclass_fields__)

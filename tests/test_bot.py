@@ -288,3 +288,14 @@ def test_history_cache_roundtrip_and_gappy_cache_redownloaded(tmp_path):
     ex.calls.clear()
     again = fetch_history(ex, "A/B", "1h", days=100, cache_dir=tmp_path)
     assert len(again) == len(first)                 # gaps were refilled from the exchange
+
+
+def test_config_error_is_explained(tmp_path):
+    from bot.config import load_config
+    p = tmp_path / "config.yaml"
+    p.write_text('platform: mt5\nmt5:\n  path: "c:\\Program Files\\MetaTrader 5\\terminal64.exe"\n')
+    with pytest.raises(SystemExit, match="SINGLE quotes") as e:
+        load_config(p)
+    assert "line 3" in str(e.value)
+    p.write_text("platform: mt5\nsymbols: [GOLD]\nmt5:\n  path: 'C:\\Program Files\\MetaTrader 5\\terminal64.exe'\n")
+    assert load_config(p).mt5["path"] == "C:\\Program Files\\MetaTrader 5\\terminal64.exe"
