@@ -11,7 +11,7 @@ from bot.data import synthetic_ohlcv
 
 
 class FakeMT5(types.ModuleType):
-    TIMEFRAME_H1, TIMEFRAME_H4, TIMEFRAME_D1 = 16385, 16388, 16408
+    TIMEFRAME_M1, TIMEFRAME_H1, TIMEFRAME_H4, TIMEFRAME_D1 = 1, 16385, 16388, 16408
     TRADE_ACTION_DEAL, TRADE_ACTION_SLTP = 1, 6
     ORDER_TYPE_BUY, ORDER_TYPE_SELL = 0, 1
     ORDER_TIME_GTC = 0
@@ -193,3 +193,16 @@ def test_min_qty_and_margin_check(mt5):
     assert b.buy("GOLD", 1, 2400) is not None               # needs $4.80 margin
     mt5.positions.clear()
     assert b.buy("GOLD", 50, 2400) is None                  # needs $240 margin, only $80
+
+
+def test_history_when_symbol_has_no_tick_yet(mt5, monkeypatch):
+    """Freshly added symbols report tick time 0; that used to make the start
+    date negative and crash on Windows (OSError: [Errno 22])."""
+    from bot.data import fetch_history
+    from bot.mt5 import MT5Market, _utc
+    m = MT5Market(mt5, ["GOLD"])
+    monkeypatch.setattr(mt5, "symbol_info_tick", lambda s: NS(bid=0.0, ask=0.0, time=0, time_msc=0))
+    assert m.milliseconds() > 1_600_000_000_000          # falls back to the latest bar
+    df = fetch_history(m, "GOLD", "1h", days=10, cache_dir=None)
+    assert len(df) > 100
+    assert _utc(-5).year == 1970                          # never raises

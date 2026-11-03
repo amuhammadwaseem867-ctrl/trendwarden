@@ -30,6 +30,15 @@ _TIMEFRAMES = {
 }
 
 
+_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+
+def _utc(ms: int) -> datetime:
+    """ms since epoch -> aware datetime. Unlike datetime.fromtimestamp this
+    never raises OSError on Windows for unusual values."""
+    return _EPOCH + timedelta(milliseconds=max(0, int(ms)))
+
+
 def _mt5():
     try:
         import MetaTrader5 as mt5
@@ -77,7 +86,13 @@ def connect(path: str | None = None, login: str | None = None, password: str | N
         creds.update(login=int(login), password=password or "", server=server or "")
 
     path = path or os.getenv("MT5_PATH")
-    candidates = [path] if path else [None] + find_terminals()
+    if path:
+        candidates = [path]
+    else:
+        # Prefer an installed XM terminal over whatever MT5 Windows remembers as default.
+        found = find_terminals()
+        xm = [f for f in found if "xm" in f.lower()]
+        candidates = xm + [None] + [f for f in found if f not in xm]
     errors = []
     for candidate in candidates:
         kwargs = dict(creds)
@@ -109,6 +124,10 @@ def connect(path: str | None = None, login: str | None = None, password: str | N
     log.info("Connected to MT5 account %s on %s (%s, leverage 1:%s, equity %.2f %s)",
              acct.login, acct.server, "DEMO" if _is_demo(mt5, acct) else "REAL",
              acct.leverage, acct.equity, acct.currency)
+    if "xm" not in str(acct.server).lower():
+        log.warning("This account is on '%s', not XM. To use XM: open XM's MT5, log in to your XM account "
+                    "(File > Login to Trade Account), or set mt5: path: to XM's terminal64.exe in config.yaml.",
+                    acct.server)
     return mt5
 
 
@@ -149,7 +168,14 @@ class MT5Market:
         for s in self.symbols:
             tick = self.mt5.symbol_info_tick(s)
             if tick is not None:
-                times.append(int(getattr(tick, "time_msc", 0) or tick.time * 1000))
+                t = int(getattr(tick, "time_msc", 0) or 0) or int(getattr(tick, "time", 0) or 0) * 1000
+                if t > 0:
+                    times.append(t)
+                    continue
+            # No tick yet (symbol just added to Market Watch): use the newest 1-minute bar.
+            bars = self.mt5.copy_rates_from_pos(s, self.mt5.TIMEFRAME_M1, 0, 1)
+            if bars is not None and len(bars) and int(bars[-1]["time"]) > 0:
+                times.append((int(bars[-1]["time"]) + 60) * 1000)
         if not times:
             return int(datetime.now(timezone.utc).timestamp() * 1000)
         return max(times)
@@ -159,8 +185,8 @@ class MT5Market:
         if since is None:
             rates = self.mt5.copy_rates_from_pos(symbol, tf, 0, limit)
         else:
-            start = datetime.fromtimestamp(since / 1000, tz=timezone.utc)
-            end = datetime.fromtimestamp(self.milliseconds() / 1000 + 86_400, tz=timezone.utc)
+            start = _utc(since)
+            end = _utc(self.milliseconds() + 86_400_000)
             rates = self.mt5.copy_rates_range(symbol, tf, start, end)
         if rates is None:
             raise RuntimeError(f"MT5 returned no data for {symbol} {timeframe}: {self.mt5.last_error()}")
