@@ -6,10 +6,16 @@ An automated crypto trading bot with strict risk controls. You test a strategy o
 
 ## What it does
 
-- **Strategies** (`bot/strategies.py`)
-  - `trend_momentum`: EMA crossover, only trading in the direction of the 200-EMA trend, filtered by ADX trend strength and an RSI cap.
-  - `mean_reversion`: buys oversold Bollinger Band dips in an up-trend and exits at the mean.
-  - `breakout`: Donchian channel breakouts (turtle-style).
+- **8 strategies** (`bot/strategies.py`), each a widely used technique written for this bot:
+  - `trend_momentum`: EMA crossover in the direction of the 200-EMA trend, filtered by ADX and RSI.
+  - `supertrend`: the ATR-based Supertrend line, popular in crypto and gold bots.
+  - `macd_trend`: MACD crossing its signal line below zero, only in an up-trend.
+  - `trend_pullback`: buys the dip (RSI pullback) inside an established up-trend.
+  - `squeeze_breakout`: Bollinger Bands squeeze inside the Keltner Channel, then a breakout.
+  - `breakout`: Donchian channel breakout (turtle-style).
+  - `mean_reversion`: buys oversold Bollinger Band dips in an up-trend.
+  - `ensemble`: a committee vote. It buys only when at least N of trend_momentum, supertrend and macd_trend agree.
+- **`discover` command**: tests every strategy on your market and picks the one that held up best on data it was never tuned on (see below).
 - **Risk management** (`bot/risk.py`)
   - Position size is set so that a stop-loss costs about 1% of your account (configurable), fees included.
   - ATR stop-loss, trailing stop and take-profit on every trade.
@@ -57,6 +63,28 @@ python main.py optimise --grid '{"fast_ema":[12,21,34],"slow_ema":[55,89]}'
 ```
 
 Focus on the **OOS** (out-of-sample) columns. Pick settings that are still profitable on unseen data and that don't change much between neighbouring values. A big gap between in-sample and out-of-sample results means the settings are overfit.
+
+### 2b. Let the bot find the best strategy for your market
+
+```bash
+python main.py discover
+python main.py discover --strategies supertrend,trend_pullback --folds 5
+```
+
+For each strategy, `discover` runs a **walk-forward test**, which is how you'd use it for real:
+1. It tunes the settings on history up to a date.
+2. It trades the next period the strategy has never seen.
+3. It moves forward and repeats (4 times by default).
+
+Only those unseen periods count. A strategy is marked **robust** only if it:
+- made money overall on unseen data,
+- was profitable in at least half of the test windows,
+- had a positive risk-adjusted return, and
+- made enough trades to mean something.
+
+You get a leaderboard in the terminal and in `results/discover.csv`. The best robust strategy is saved as `results/best_config.yaml`, with live trading still off. Review it, copy it over `config.yaml`, and paper trade it.
+
+If **nothing** passes, that's a real answer: no strategy here has a reliable edge on that market and timeframe. Try another timeframe or more history, and don't trade it live.
 
 ### 3. Paper trade for at least a few weeks
 
@@ -139,7 +167,8 @@ On an $80 account, one loss can cost up to $8, and a losing streak can halve the
 | Command | What it does |
 |---|---|
 | `python main.py backtest [--plot] [--synthetic \| --csv F]` | Historical test |
-| `python main.py optimise [--grid JSON] [--train 0.7]` | Walk-forward parameter search |
+| `python main.py optimise [--grid JSON] [--train 0.7]` | Parameter search with an unseen test period |
+| `python main.py discover [--strategies a,b] [--folds 4]` | Rank all strategies on unseen data and save the best config |
 | `python main.py paper` | Paper trading on live prices |
 | `python main.py live --confirm-live` | Real-money trading |
 | `python main.py status` | Open positions, cash, PnL, halt state |
@@ -157,7 +186,7 @@ Create a bot with [@BotFather](https://t.me/BotFather), get your chat id, and se
 main.py              command line
 config.example.yaml  all settings, with comments
 bot/indicators.py    EMA, RSI, ATR, ADX, Bollinger, Donchian
-bot/strategies.py    the three strategies (add your own here)
+bot/strategies.py    the eight strategies (add your own here)
 bot/risk.py          sizing, stops, daily limit, kill switch
 bot/trader.py        shared trading logic used by backtest AND live
 bot/backtest.py      backtester, metrics, walk-forward optimiser

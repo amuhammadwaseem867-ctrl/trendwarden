@@ -71,3 +71,44 @@ def donchian(df: pd.DataFrame, period: int):
     upper = df["high"].rolling(period, min_periods=period).max().shift(1)
     lower = df["low"].rolling(period, min_periods=period).min().shift(1)
     return lower, upper
+
+
+def macd(close: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9):
+    line = ema(close, fast) - ema(close, slow)
+    sig = line.ewm(span=signal, adjust=False, min_periods=signal).mean()
+    return line, sig, line - sig
+
+
+def keltner(df: pd.DataFrame, period: int = 20, mult: float = 1.5):
+    mid = ema(df["close"], period)
+    rng = atr(df, period)
+    return mid - mult * rng, mid, mid + mult * rng
+
+
+def supertrend(df: pd.DataFrame, period: int = 10, mult: float = 3.0):
+    """Supertrend line and direction (+1 up-trend, -1 down-trend)."""
+    a = atr(df, period).to_numpy()
+    hl2 = ((df["high"] + df["low"]) / 2).to_numpy()
+    close = df["close"].to_numpy()
+    n = len(df)
+    upper = hl2 + mult * a
+    lower = hl2 - mult * a
+    fu, fl = upper.copy(), lower.copy()
+    direction = np.zeros(n)
+    line = np.full(n, np.nan)
+    for i in range(n):
+        if np.isnan(a[i]):
+            continue
+        if i == 0 or np.isnan(a[i - 1]):
+            direction[i] = 1
+            line[i] = fl[i]
+            continue
+        # Bands only tighten while price stays on their side.
+        fu[i] = upper[i] if (upper[i] < fu[i - 1] or close[i - 1] > fu[i - 1]) else fu[i - 1]
+        fl[i] = lower[i] if (lower[i] > fl[i - 1] or close[i - 1] < fl[i - 1]) else fl[i - 1]
+        if direction[i - 1] >= 0:
+            direction[i] = -1 if close[i] < fl[i] else 1
+        else:
+            direction[i] = 1 if close[i] > fu[i] else -1
+        line[i] = fl[i] if direction[i] > 0 else fu[i]
+    return pd.Series(line, index=df.index), pd.Series(direction, index=df.index)

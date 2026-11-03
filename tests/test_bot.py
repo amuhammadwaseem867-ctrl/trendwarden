@@ -81,17 +81,18 @@ def test_backtest_runs_and_accounts_cleanly(df, name):
     assert m["max_drawdown_pct"] <= 0
 
 
-def test_no_lookahead(df):
+@pytest.mark.parametrize("name", list(STRATEGIES))
+def test_no_lookahead(df, name):
     """Changing future candles must not change any decision made before them."""
     cut = 1800
-    base = run_backtest({"A/USDT": df}, "trend_momentum", {}, RiskConfig(), "1h")
+    base = run_backtest({"A/USDT": df}, name, {}, RiskConfig(), "1h")
     tampered = df.copy()
     tampered.iloc[cut:, :4] *= np.linspace(0.5, 2.0, len(df) - cut)[:, None]
-    alt = run_backtest({"A/USDT": tampered}, "trend_momentum", {}, RiskConfig(), "1h")
+    alt = run_backtest({"A/USDT": tampered}, name, {}, RiskConfig(), "1h")
     cutoff = df.index[cut].isoformat()
     a = base.trades[base.trades.exit_time < cutoff]
     b = alt.trades[alt.trades.exit_time < cutoff]
-    pd.testing.assert_frame_equal(a.reset_index(drop=True), b.reset_index(drop=True))
+    pd.testing.assert_frame_equal(a.reset_index(drop=True), b.reset_index(drop=True), check_dtype=False)
 
 
 def test_multi_symbol_respects_max_positions():
@@ -210,3 +211,41 @@ def test_small_account_backtest_accounts_cleanly():
     assert res.metrics["trades"] > 0
     assert (res.trades.qty == res.trades.qty.round()).all()          # whole ounces only
     assert res.metrics["final_equity"] == pytest.approx(80 + res.trades.pnl.sum(), abs=0.01)
+
+
+# ---------------------------------------------------------------- new strategies / discovery
+def test_supertrend_follows_trend():
+    idx = pd.date_range("2024-01-01", periods=300, freq="1h", tz="UTC")
+    up = np.linspace(100, 200, 150)
+    down = np.linspace(200, 120, 150)
+    close = np.concatenate([up, down])
+    df_ = pd.DataFrame({"open": close, "high": close + 0.5, "low": close - 0.5, "close": close, "volume": 1}, index=idx)
+    _, direction = ta.supertrend(df_, 10, 3.0)
+    assert direction.iloc[140] == 1 and direction.iloc[-1] == -1
+
+
+def test_macd_matches_definition(df):
+    line, sig, hist = ta.macd(df["close"])
+    expected = ta.ema(df["close"], 12) - ta.ema(df["close"], 26)
+    pd.testing.assert_series_equal(line, expected)
+    assert (hist.dropna() == (line - sig).dropna()).all()
+
+
+def test_ensemble_needs_votes(df):
+    one = build_strategy("ensemble", {"min_votes": 1}).generate(df)
+    all3 = build_strategy("ensemble", {"min_votes": 3}).generate(df)
+    assert one["bull"].sum() >= all3["bull"].sum()
+    assert (all3.loc[all3["bull"], "votes"] == 3).all()
+    with pytest.raises(ValueError):
+        build_strategy("ensemble", {"members": ["mean_reversion"]})
+
+
+def test_walk_forward_and_discover(df):
+    from bot.backtest import discover, walk_forward
+    wf = walk_forward({"A/USDT": df}, "supertrend", {"st_mult": [2.0, 3.0]}, {}, RiskConfig(), "1h", folds=3)
+    assert len(wf.folds) == 3 and "oos_return_pct" in wf.summary
+    assert wf.robust == (not wf.reasons)
+    ranked = discover({"A/USDT": df}, {"supertrend": {"st_mult": [3.0]}, "macd_trend": {"fast": [12]}},
+                      RiskConfig(), "1h", folds=2, min_trades=1)
+    assert {r.strategy for r in ranked} == {"supertrend", "macd_trend"}
+    assert [r.robust for r in ranked] == sorted([r.robust for r in ranked], reverse=True)

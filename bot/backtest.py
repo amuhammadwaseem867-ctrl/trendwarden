@@ -4,7 +4,7 @@ from __future__ import annotations
 import itertools
 import logging
 import math
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 
 import numpy as np
 import pandas as pd
@@ -13,7 +13,7 @@ from .broker import SimBroker
 from .data import timeframe_ms
 from .risk import RiskConfig, RiskManager
 from .strategies import build_strategy
-from .trader import Trader
+from .trader import Trade, Trader
 
 log = logging.getLogger(__name__)
 
@@ -50,12 +50,14 @@ def run_backtest(data: dict[str, pd.DataFrame], strategy_name: str, strategy_par
     prices: dict[str, float] = {}
     curve = []
 
+    cols = ["open", "high", "low", "close", "entry", "exit", "atr"]
+    rows = {s: df[cols].to_dict("index") for s, df in prepared.items()}  # fast per-bar lookup
     for ts in timeline:
         ts_str = ts.isoformat()
-        for symbol, df in prepared.items():
-            if ts not in df.index:
+        for symbol, bars in rows.items():
+            bar = bars.get(ts)
+            if bar is None:
                 continue
-            bar = df.loc[ts]
             prices[symbol] = float(bar["close"])
             trader.on_bar(symbol, bar, ts_str, prices)
         curve.append((ts, trader.after_bar(prices, ts.date(), ts_str)))
@@ -65,7 +67,8 @@ def run_backtest(data: dict[str, pd.DataFrame], strategy_name: str, strategy_par
         curve[-1] = (timeline[-1], trader.equity(prices))
 
     equity = pd.Series(dict(curve), dtype=float, name="equity")
-    trades = pd.DataFrame([asdict(t) for t in trader.trades])
+    trades = pd.DataFrame([asdict(t) for t in trader.trades],
+                          columns=[f.name for f in fields(Trade)])
     metrics = compute_metrics(equity, trades, timeframe, starting_cash)
     metrics["halted"] = trader.risk.state.halted
     bench = buy_and_hold(prepared, timeline, timeframe)
@@ -182,3 +185,100 @@ def optimise(data: dict[str, pd.DataFrame], strategy_name: str, grid: dict[str, 
             "oos_maxdd_pct": oos["max_drawdown_pct"], "oos_trades": oos["trades"],
         })
     return pd.DataFrame(report)
+
+
+# ----------------------------------------------------------------------------
+# Walk-forward strategy discovery
+# ----------------------------------------------------------------------------
+@dataclass
+class WalkForwardResult:
+    strategy: str
+    params: dict            # best params on the most recent training window
+    folds: list[dict]       # out-of-sample metrics for each test window
+    summary: dict
+    robust: bool
+    reasons: list[str]
+
+
+def _best_params(data, strategy_name, grid, base_params, risk_cfg, timeframe, end, min_trades, bt_kwargs):
+    keys = list(grid)
+    best, best_score = None, -np.inf
+    for values in itertools.product(*(grid[k] for k in keys)) if keys else [()]:
+        params = {**base_params, **dict(zip(keys, values))}
+        try:
+            res = run_backtest(data, strategy_name, params, risk_cfg, timeframe, end=end, **bt_kwargs)
+        except ValueError:
+            continue
+        sc = score(res.metrics, min_trades)
+        if sc > best_score:
+            best, best_score = params, sc
+    return best
+
+
+def walk_forward(data: dict[str, pd.DataFrame], strategy_name: str, grid: dict[str, list],
+                 base_params: dict, risk_cfg: RiskConfig, timeframe: str, folds: int = 4,
+                 first_train_frac: float = 0.5, min_trades: int = 5, **bt_kwargs) -> WalkForwardResult:
+    """Anchored walk-forward test, the way the strategy would really be used:
+    tune on all data up to a date, trade the next unseen window, move forward,
+    repeat. Only the unseen windows count towards the result."""
+    timeline = sorted(set().union(*(df.index for df in data.values())))
+    first = int(len(timeline) * first_train_frac)
+    bounds = np.linspace(first, len(timeline), folds + 1).astype(int)
+    fold_results, params = [], None
+    for k in range(folds):
+        test_start = timeline[bounds[k]]
+        test_end = timeline[bounds[k + 1]] if bounds[k + 1] < len(timeline) else None
+        params = _best_params(data, strategy_name, grid, base_params, risk_cfg, timeframe,
+                              test_start, max(1, min_trades // 2), bt_kwargs)
+        if params is None:
+            fold_results.append({"fold": k + 1, "return_pct": 0.0, "trades": 0, "sharpe": 0.0,
+                                 "max_drawdown_pct": 0.0, "profit_factor": 0.0, "note": "no params traded"})
+            continue
+        m = run_backtest(data, strategy_name, params, risk_cfg, timeframe,
+                         start=test_start, end=test_end, **bt_kwargs).metrics
+        fold_results.append({"fold": k + 1, "return_pct": m["total_return_pct"], "trades": m["trades"],
+                             "sharpe": m["sharpe"], "max_drawdown_pct": m["max_drawdown_pct"],
+                             "profit_factor": m.get("profit_factor", 0.0)})
+
+    rets = [f["return_pct"] for f in fold_results]
+    compounded = (np.prod([1 + r / 100 for r in rets]) - 1) * 100
+    trades = sum(f["trades"] for f in fold_results)
+    positive = sum(r > 0 for r in rets)
+    worst_dd = min(f["max_drawdown_pct"] for f in fold_results)
+    summary = {
+        "oos_return_pct": round(float(compounded), 2),
+        "folds_positive": f"{positive}/{folds}",
+        "worst_fold_pct": round(min(rets), 2),
+        "avg_sharpe": round(float(np.mean([f["sharpe"] for f in fold_results])), 2),
+        "worst_drawdown_pct": round(worst_dd, 2),
+        "oos_trades": trades,
+    }
+    reasons = []
+    if compounded <= 0:
+        reasons.append("lost money on unseen data")
+    if positive < math.ceil(folds / 2):  # must make money in at least half the windows
+        reasons.append("profitable in too few test windows")
+    if trades < min_trades:
+        reasons.append(f"only {trades} trades - too few to trust")
+    if summary["avg_sharpe"] <= 0:
+        reasons.append("negative risk-adjusted return")
+    return WalkForwardResult(strategy_name, params or base_params, fold_results, summary,
+                             robust=not reasons, reasons=reasons)
+
+
+def discover(data: dict[str, pd.DataFrame], grids: dict[str, dict], risk_cfg: RiskConfig, timeframe: str,
+             folds: int = 4, min_trades: int = 10, progress=None, **bt_kwargs) -> list[WalkForwardResult]:
+    """Walk-forward test every strategy and rank them. Robust ones first, then
+    by out-of-sample return per unit of drawdown."""
+    results = []
+    for name, grid in grids.items():
+        if progress:
+            progress(name)
+        results.append(walk_forward(data, name, grid, {}, risk_cfg, timeframe, folds=folds,
+                                    min_trades=min_trades, **bt_kwargs))
+
+    def rank(r: WalkForwardResult):
+        s = r.summary
+        return (r.robust, s["oos_return_pct"] / max(1.0, abs(s["worst_drawdown_pct"])))
+
+    return sorted(results, key=rank, reverse=True)
