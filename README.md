@@ -162,6 +162,22 @@ copy config.gold-small.yaml config.yaml
 
 On an $80 account, one loss can cost up to $8, and a losing streak can halve the account. Try it with `paper` mode and on an XM demo account set to the same balance before using real money.
 
+## Bundled Claude skills: Trader skill pack (US stocks)
+
+`.claude/skills/` contains the [Trader skill pack](https://github.com/Jakeschincariol/trader-skill) by Jake Schincariol (MIT). It's 11 Claude Code skills for **US stock investing**, available as slash commands whenever you open Claude Code in this folder:
+
+| Command | What it does |
+|---|---|
+| `/trader-copycat` | Rebuilds a famous investor's portfolio from their SEC 13F filing |
+| `/trader-pelosi` | Congress members' stock-trade disclosures |
+| `/trader-news` | Headlines and SEC 8-K filings for your stocks |
+| `/trader-analyst`, `/trader-screener` | Earnings from SEC filings, and screening by your rules |
+| `/trader-budget`, `/trader-risk`, `/trader-rebalance`, `/trader-tax` | Sizing, risk checks, rebalancing, tax lots |
+| `/trader-alerts` | Price alerts with NYSE hours |
+| `/trader-broker` | Orders through Alpaca or Interactive Brokers, only after your explicit "yes" |
+
+These are a **separate toolkit**. They don't trade gold, don't connect to MT5/XM, and don't change how the TrendWarden bot trades. SEC asks every script to identify itself, so set `SEC_USER_AGENT="Your Name you@example.com"` before using the SEC-based skills. The skills keep your portfolio files in `trader/`, which is git-ignored.
+
 ## Commands
 
 | Command | What it does |

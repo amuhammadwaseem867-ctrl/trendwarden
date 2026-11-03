@@ -8,3 +8,6 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+
+# trader-skill working files (your portfolio, orders, alerts)
+trader/
