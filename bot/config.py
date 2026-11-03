@@ -7,6 +7,7 @@ from pathlib import Path
 import yaml
 
 from .risk import RiskConfig
+from .intel.hub import parse as parse_intel
 from .strategies import build_strategy
 
 
@@ -45,6 +46,7 @@ class Config:
     state_dir: str = "state"
     live_enabled: bool = False
     mt5: dict = field(default_factory=dict)  # path, magic, deviation
+    intel: dict = field(default_factory=lambda: parse_intel(None))
 
     def strategy(self):
         return build_strategy(self.strategy_name, self.strategy_params)
@@ -84,6 +86,7 @@ def load_config(path: str | Path) -> Config:
         state_dir=raw.get("state_dir", "state"),
         live_enabled=bool(raw.get("live_enabled", False)),
         mt5=raw.get("mt5", {}) or {},
+        intel=parse_intel(raw.get("intel")),
     )
     if not cfg.symbols:
         raise ValueError("At least one symbol is required")

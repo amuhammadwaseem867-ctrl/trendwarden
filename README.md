@@ -162,21 +162,51 @@ copy config.gold-small.yaml config.yaml
 
 On an $80 account, one loss can cost up to $8, and a losing streak can halve the account. Try it with `paper` mode and on an XM demo account set to the same balance before using real money.
 
-## Bundled Claude skills: Trader skill pack (US stocks)
+## Market intelligence and stock copy-trading (Trader skill pack)
 
-`.claude/skills/` contains the [Trader skill pack](https://github.com/Jakeschincariol/trader-skill) by Jake Schincariol (MIT). It's 11 Claude Code skills for **US stock investing**, available as slash commands whenever you open Claude Code in this folder:
+The bot uses data from the bundled [Trader skill pack](https://github.com/Jakeschincariol/trader-skill) (MIT, by Jake Schincariol, in `.claude/skills/`) for four features.
 
-| Command | What it does |
-|---|---|
-| `/trader-copycat` | Rebuilds a famous investor's portfolio from their SEC 13F filing |
-| `/trader-pelosi` | Congress members' stock-trade disclosures |
-| `/trader-news` | Headlines and SEC 8-K filings for your stocks |
-| `/trader-analyst`, `/trader-screener` | Earnings from SEC filings, and screening by your rules |
-| `/trader-budget`, `/trader-risk`, `/trader-rebalance`, `/trader-tax` | Sizing, risk checks, rebalancing, tax lots |
-| `/trader-alerts` | Price alerts with NYSE hours |
-| `/trader-broker` | Orders through Alpaca or Interactive Brokers, only after your explicit "yes" |
+### 1. News guard (gold): on in the gold configs
+Gold's wildest moves come around big US news. The bot pauses **new** trades:
+- from 30 minutes before to 90 minutes after the **US jobs report** (first Friday, 08:30 New York) and **Fed rate decisions** (dates in the config; check them at federalreserve.gov),
+- around any extra dates you add (for example CPI from bls.gov),
+- for 60 minutes after a **breaking high-impact gold headline** (Fed, inflation, jobs, war, sanctions…) from Yahoo Finance.
 
-These are a **separate toolkit**. They don't trade gold, don't connect to MT5/XM, and don't change how the TrendWarden bot trades. SEC asks every script to identify itself, so set `SEC_USER_AGENT="Your Name you@example.com"` before using the SEC-based skills. The skills keep your portfolio files in `trader/`, which is git-ignored.
+When a pause starts, stops on trades already in profit move up to break-even. The scheduled part is also applied in `backtest` and `discover`, so the results show its effect. Headlines are live/paper only.
+
+```bash
+python main.py intel news        # upcoming events and any current pause
+```
+
+### 2. Smart money (gold): off by default
+This reads the 13F filings of big funds (Bridgewater, Soros, Druckenmiller, Renaissance, Elliott…) and compares their **gold ETF** holdings (SPDR Gold, iShares Gold…) with the previous quarter. You get a bullish, bearish or neutral bias. Set `mode: filter` to block new buys while more funds are cutting gold than adding. This is a **slow** signal: 13Fs are quarterly and up to 45 days old. Needs `SEC_USER_AGENT` in `.env`.
+
+```bash
+python main.py intel smart-money --refresh
+```
+
+### 3. Congress alerts: off by default
+This alerts you (log plus Telegram) when a member of the House discloses a trade in a gold ETF or gold miner (GLD, IAU, GDX, Newmont, Barrick…). It's information only and never changes trades. Scanning the PDFs needs **Poppler** (`pdftotext`) on your PATH; without it you get a link to each new filing instead.
+
+```bash
+python main.py intel congress
+```
+
+### 4. Stock copy-trading (US stocks via Alpaca)
+This copies a famous investor's latest 13F portfolio into an [Alpaca](https://alpaca.markets) account using the pack's tools: copycat → budget → risk → broker.
+
+```bash
+python main.py copy plan --investor buffett --top 5 --budget 1000   # 13F -> sized orders -> risk check
+python main.py copy execute                                          # each order needs YOUR typed "yes"
+python main.py copy rebalance                                        # later: bring drifted weights back
+python main.py copy status
+```
+
+Put `ALPACA_API_KEY` / `ALPACA_API_SECRET` (start with **paper** keys) and `SEC_USER_AGENT` in `.env`. The rules (budget, cash buffer, max per stock, max order, daily order limit) live in `trader/config.json`. The bot refuses to trade if that file and your Alpaca keys disagree about paper vs live.
+
+A 13F shows what a fund held weeks ago, so copying it isn't the same as trading with them.
+
+All `trader/` files are shared with the `/trader-*` slash commands in Claude Code, so you can also manage the same portfolio by chatting.
 
 ## Commands
 
@@ -185,6 +215,8 @@ These are a **separate toolkit**. They don't trade gold, don't connect to MT5/XM
 | `python main.py backtest [--plot] [--synthetic \| --csv F]` | Historical test |
 | `python main.py optimise [--grid JSON] [--train 0.7]` | Parameter search with an unseen test period |
 | `python main.py discover [--strategies a,b] [--folds 4]` | Rank all strategies on unseen data and save the best config |
+| `python main.py intel news\|smart-money\|congress` | News schedule, funds' gold positioning, Congress gold trades |
+| `python main.py copy plan\|execute\|rebalance\|status` | Copy an investor's US stock portfolio via Alpaca |
 | `python main.py paper` | Paper trading on live prices |
 | `python main.py live --confirm-live` | Real-money trading |
 | `python main.py status` | Open positions, cash, PnL, halt state |
@@ -210,6 +242,9 @@ bot/broker.py        simulated and live (ccxt) order execution
 bot/mt5.py           MetaTrader 5 data + orders (XM, gold, forex)
 config.gold-xm.yaml  ready-made config for gold on XM
 config.gold-small.yaml  gold on XM for small accounts
+bot/intel/           news guard, smart money, Congress alerts (use the skill pack)
+bot/copytrade.py     stock copy-trading pipeline; bot/alpaca.py: Alpaca client
+.claude/skills/      the Trader skill pack (MIT, third party)
 bot/engine.py        paper/live loop with state persistence
 bot/data.py          candle download, caching, synthetic data
 tests/               pytest suite (run: python -m pytest)

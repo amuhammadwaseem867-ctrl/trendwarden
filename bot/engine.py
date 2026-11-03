@@ -23,6 +23,7 @@ from .broker import LiveBroker, SimBroker
 from .config import Config
 from .data import drop_unclosed, make_market, to_frame
 from .notify import make_notifier
+from .intel.hub import Intel
 from .risk import Position, RiskManager, RiskState
 from .trader import Trader
 
@@ -55,6 +56,8 @@ class Engine:
             broker = SimBroker(x.starting_cash, x.fee_rate, x.slippage_rate, x.leverage, x.min_qty, x.qty_step)
 
         self.trader = Trader(broker, RiskManager(cfg.risk), make_notifier(f"TrendWarden {mode}"))
+        self.intel = Intel(cfg.intel, cfg.state_dir, self.trader.notify)
+        self._last_block: str | None = None
         self._load_state()
 
     # ----- persistence ---------------------------------------------------
@@ -129,6 +132,21 @@ class Engine:
                 self.trader.close(symbol, px, ts, "stop")
             elif pos.take_profit is not None and px >= pos.take_profit:
                 self.trader.close(symbol, px, ts, "take_profit")
+
+        # 1b) News guard / smart money / Congress alerts.
+        if self.intel.active:
+            self.intel.update(now)
+            block = self.intel.block_reason(now)
+            if block != self._last_block:
+                if block:
+                    log.warning("New entries paused: %s", block)
+                    self.trader.notify(f"New entries paused: {block}")
+                else:
+                    log.info("New entries allowed again")
+                self._last_block = block
+            self.trader.entry_block = block
+            if self.intel.news_pause_started(now):
+                self.trader.protect_breakeven(prices, ts)
 
         # 2) Strategy on newly closed candles.
         for symbol in self.cfg.symbols:

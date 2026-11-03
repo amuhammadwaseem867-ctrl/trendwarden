@@ -78,8 +78,13 @@ def get_data(cfg, args) -> dict[str, pd.DataFrame]:
 
 def sim_kwargs(cfg) -> dict:
     x = cfg.execution
-    return dict(starting_cash=x.starting_cash, fee_rate=x.fee_rate, slippage_rate=x.slippage_rate,
-                leverage=x.leverage, min_qty=x.min_qty, qty_step=x.qty_step)
+    kw = dict(starting_cash=x.starting_cash, fee_rate=x.fee_rate, slippage_rate=x.slippage_rate,
+              leverage=x.leverage, min_qty=x.min_qty, qty_step=x.qty_step)
+    ng = cfg.intel["news_guard"]
+    if ng.enabled and ng.in_backtest:
+        from bot.intel.news_guard import NewsGuard
+        kw["entry_filter"] = NewsGuard(ng).backtest_filter(cfg.intel["data_timezone"])
+    return kw
 
 
 def cmd_backtest(cfg, args) -> None:
@@ -201,6 +206,63 @@ def cmd_optimise(cfg, args) -> None:
     print("\nPrefer configs that stay profitable OOS with similar Sharpe - big IS/OOS gaps mean overfitting.")
 
 
+def cmd_intel(cfg, args) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    if args.what == "news":
+        from bot.intel.news_guard import NewsGuard
+
+        ng = cfg.intel["news_guard"]
+        guard = NewsGuard(ng)
+        print(f"News guard is {'ON' if ng.enabled else 'OFF'} in your config "
+              f"(pause {ng.minutes_before} min before to {ng.minutes_after} min after each event).\n")
+        print("Upcoming scheduled events (your local time):")
+        for t, name in guard.events_between(now, now + timedelta(days=args.days)):
+            print(f"  {t.astimezone():%a %d %b %H:%M}  {name}")
+        guard.poll_headlines(now)
+        hb = guard.headline_block(now)
+        print(f"\nBreaking-headline pause right now: {hb or 'none'}")
+        print(f"Scheduled pause right now: {guard.scheduled_block(now) or 'none'}")
+    elif args.what == "smart-money":
+        from bot.intel.smart_money import SmartMoney, render
+
+        sm = SmartMoney(cfg.intel["smart_money"], cfg.state_dir)
+        report = sm.refresh(force=args.refresh or sm.stale())
+        print(render(report) if report else "No report yet (see the warning above).")
+    elif args.what == "congress":
+        from dataclasses import replace
+
+        from bot.intel.congress import CongressWatch
+
+        watch = CongressWatch(replace(cfg.intel["congress"], enabled=True), cfg.state_dir)
+        found = watch.check(now)
+        print(f"\n{len(found)} gold-related Congress trade(s) in new filings." if found else
+              "\nNo new gold-related Congress trades.")
+
+
+def cmd_copy(cfg, args) -> None:
+    from bot import copytrade as ct
+    from bot.alpaca import AlpacaError
+
+    try:
+        if args.action == "plan":
+            ct.plan(args.investor, args.top, args.budget, use_alpaca=not args.no_alpaca)
+        elif args.action == "rebalance":
+            ct.rebalance(args.sell_untracked)
+        elif args.action == "execute":
+            placed = ct.execute()
+            print(f"\n{len(placed)} order(s) placed.")
+        elif args.action == "status":
+            from bot.alpaca import Alpaca
+
+            info = ct.sync_from_alpaca(Alpaca())
+            print(f"Alpaca: equity ${info['equity']:,.2f}, cash ${info['cash']:,.2f}, {info['positions']} positions "
+                  "(saved to trader/portfolio.json)")
+    except (ct.CopyError, AlpacaError) as exc:
+        raise SystemExit(str(exc)) from None
+
+
 def cmd_run(cfg, args, mode: str) -> None:
     from bot.engine import Engine
 
@@ -273,6 +335,19 @@ def main(argv=None) -> None:
     dc.add_argument("--strategies", help="comma-separated subset, e.g. supertrend,macd_trend")
     dc.add_argument("--out", default="results")
 
+    it = sub.add_parser("intel", help="news guard / smart money / Congress reports")
+    it.add_argument("what", choices=["news", "smart-money", "congress"])
+    it.add_argument("--days", type=int, default=14, help="news: how far ahead to list events")
+    it.add_argument("--refresh", action="store_true", help="smart-money: re-download now")
+
+    cp = sub.add_parser("copy", help="copy a famous investor's US stock portfolio via Alpaca")
+    cp.add_argument("action", choices=["plan", "rebalance", "execute", "status"])
+    cp.add_argument("--investor", default="berkshire", help="name (buffett, ackman, dalio...) or SEC CIK")
+    cp.add_argument("--top", type=int, default=5)
+    cp.add_argument("--budget", type=float, help="dollars to invest (saved in trader/config.json)")
+    cp.add_argument("--no-alpaca", action="store_true", help="plan without connecting to Alpaca")
+    cp.add_argument("--sell-untracked", action="store_true", help="rebalance: also sell stocks not in the targets")
+
     sub.add_parser("paper")
     lv = sub.add_parser("live")
     lv.add_argument("--confirm-live", action="store_true")
@@ -292,6 +367,10 @@ def main(argv=None) -> None:
         cmd_backtest(cfg, args)
     elif args.cmd in ("optimise", "optimize"):
         cmd_optimise(cfg, args)
+    elif args.cmd == "intel":
+        cmd_intel(cfg, args)
+    elif args.cmd == "copy":
+        cmd_copy(cfg, args)
     elif args.cmd == "discover":
         cmd_discover(cfg, args)
     elif args.cmd in ("paper", "live"):

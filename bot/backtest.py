@@ -30,7 +30,8 @@ def run_backtest(data: dict[str, pd.DataFrame], strategy_name: str, strategy_par
                  risk_cfg: RiskConfig, timeframe: str, starting_cash: float = 10_000,
                  fee_rate: float = 0.001, slippage_rate: float = 0.0005,
                  start: pd.Timestamp | None = None, end: pd.Timestamp | None = None,
-                 leverage: float = 1.0, min_qty: float = 0.0, qty_step: float = 0.0) -> BacktestResult:
+                 leverage: float = 1.0, min_qty: float = 0.0, qty_step: float = 0.0,
+                 entry_filter=None) -> BacktestResult:
     """Simulate the strategy bar by bar.
 
     Signals are computed on the full history (they only use past data), and
@@ -54,6 +55,8 @@ def run_backtest(data: dict[str, pd.DataFrame], strategy_name: str, strategy_par
     rows = {s: df[cols].to_dict("index") for s, df in prepared.items()}  # fast per-bar lookup
     for ts in timeline:
         ts_str = ts.isoformat()
+        if entry_filter is not None:
+            trader.entry_block = entry_filter(ts)
         for symbol, bars in rows.items():
             bar = bars.get(ts)
             if bar is None:

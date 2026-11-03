@@ -32,6 +32,28 @@ execution:
   poll_seconds: 30
   starting_cash: 10000      # backtest and paper-trading balance
 
+# ---- Market intelligence (uses the bundled Trader skill pack) ----
+intel:
+  data_timezone: UTC             # crypto exchanges report candles in UTC
+  news_guard:                    # no new trades around big US news (gold's wildest moves)
+    enabled: false               # mostly useful for gold/forex
+    jobs_report: true            # first Friday of the month, 08:30 New York
+    # Fed decision days (14:00 New York). Check/add at federalreserve.gov:
+    fomc_dates: [2026-01-28, 2026-03-18, 2026-04-29, 2026-06-17, 2026-07-29, 2026-09-16, 2026-10-28, 2026-12-09]
+    extra_events: []             # e.g. CPI days from bls.gov: ["2026-11-12 08:30"] (New York time)
+    minutes_before: 30
+    minutes_after: 90
+    headlines: true              # breaking gold headlines (Yahoo Finance) pause entries too
+    headline_pause_minutes: 60
+    protect_profits: true        # when a pause starts, move winning trades' stops to break-even
+    in_backtest: true            # apply the schedule in backtest/discover as well
+  smart_money:                   # big funds' gold ETF positions from SEC 13F filings (slow signal)
+    enabled: false               # needs SEC_USER_AGENT in .env
+    mode: info                   # info = report only | filter = no new buys while funds are cutting gold
+  congress:                      # alert when Congress members disclose gold / miner trades
+    enabled: false
+    poll_hours: 6
+
 state_dir: state
 
 # Real-money trading stays off until you set this to true AND run

@@ -37,6 +37,7 @@ class Trader:
         self.positions: dict[str, Position] = {}
         self.trades: list[Trade] = []
         self.entry_fees: dict[str, float] = {}
+        self.entry_block: str | None = None  # set by the news guard / smart-money filter
         self.notify = notify or (lambda msg: None)
 
     # ----- accounting ----------------------------------------------------
@@ -50,6 +51,9 @@ class Trader:
 
     # ----- orders --------------------------------------------------------
     def open(self, symbol: str, price: float, atr: float, ts: str, prices: dict[str, float]) -> None:
+        if self.entry_block:
+            log.info("%s %s: entry signal skipped (%s)", ts, symbol, self.entry_block)
+            return
         equity = self.equity(prices)
         ok, why = self.risk.can_open(symbol, equity, len(self.positions))
         if not ok:
@@ -116,6 +120,16 @@ class Trader:
         log.info("%s %s", ts, msg)
         self.notify(msg)
         return trade
+
+    def protect_breakeven(self, prices: dict[str, float], ts: str) -> None:
+        """Move the stop of every trade that is in profit up to its entry price."""
+        for symbol, pos in self.positions.items():
+            px = prices.get(symbol)
+            if px is not None and px > pos.entry_price and pos.stop < pos.entry_price:
+                pos.stop = pos.entry_price
+                log.info("%s %s: news pause - stop moved to break-even %.6g", ts, symbol, pos.stop)
+                if hasattr(self.broker, "protect"):
+                    self.broker.protect(symbol, pos.stop, pos.take_profit)
 
     def flatten(self, prices: dict[str, float], ts: str, reason: str) -> None:
         for symbol in list(self.positions):
