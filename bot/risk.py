@@ -80,7 +80,7 @@ class RiskManager:
         self.cfg = cfg
         self.state = state or RiskState()
 
-    # ----- account level -------------------------------------------------
+    # account level
     def update_equity(self, equity: float, today: date) -> bool:
         """Track peak / daily equity. Returns True if the kill switch just tripped."""
         s = self.state
@@ -122,7 +122,7 @@ class RiskManager:
         if pnl < 0 and self.cfg.cooldown_bars > 0:
             self.state.cooldown[symbol] = self.cfg.cooldown_bars
 
-    # ----- trade level ---------------------------------------------------
+    # trade level
     def size(self, equity: float, cash: float, price: float, atr: float, fee_rate: float) -> float:
         """Quantity such that hitting the stop loses ~risk_per_trade_pct of equity."""
         if not (atr > 0 and price > 0 and math.isfinite(atr)):

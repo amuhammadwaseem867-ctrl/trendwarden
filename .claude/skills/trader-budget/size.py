@@ -60,7 +60,7 @@ class SizeError(Exception):
     pass
 
 
-# ---------------------------------------------------------------- inputs
+# inputs
 
 def read_json(path, what):
     try:
@@ -138,7 +138,7 @@ def load_prices(path):
     return out
 
 
-# ---------------------------------------------------------------- the maths
+# the maths
 
 def normalise(rows, blocked=(), top=None):
     """Drop blocked and non-positive weights, keep the top N, renormalise to 100."""
@@ -334,7 +334,7 @@ def size(rows, cfg, budget=None, prices=None, whole=None, cents=False, top=None)
     }
 
 
-# ---------------------------------------------------------------- orders
+# orders
 
 def _num(x):
     """1250 -> "1250", 1118.13 -> "1118.13" (Alpaca wants these as strings)."""
@@ -384,7 +384,7 @@ def write_orders(path, orders, result, cfg, source=""):
         fh.write("\n")
 
 
-# ---------------------------------------------------------------- report
+# report
 
 def money(x):
     x = float(x)

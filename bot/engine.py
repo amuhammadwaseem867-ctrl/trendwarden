@@ -60,7 +60,7 @@ class Engine:
         self._last_block: str | None = None
         self._load_state()
 
-    # ----- persistence ---------------------------------------------------
+    # persistence
     def _load_state(self) -> None:
         if not self.state_path.exists():
             return
@@ -96,7 +96,7 @@ class Engine:
             df.to_csv(self.trades_path, mode="a", header=not self.trades_path.exists(), index=False)
             self.trader.trades.clear()
 
-    # ----- market data ---------------------------------------------------
+    # market data
     def _candles(self, symbol: str) -> pd.DataFrame:
         limit = min(self.strategy.warmup + 50, 1000)
         rows = self.exchange.fetch_ohlcv(symbol, self.cfg.timeframe, limit=limit)
@@ -109,7 +109,7 @@ class Engine:
             prices[symbol] = float(t.get("last") or t.get("close"))
         return prices
 
-    # ----- main loop -----------------------------------------------------
+    # main loop
     def step(self) -> None:
         now = datetime.now(timezone.utc)
         ts = now.isoformat(timespec="seconds")

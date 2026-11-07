@@ -122,7 +122,7 @@ class Fetcher(object):
         return json.loads(data.decode("utf-8"))
 
 
-# ---------------------------------------------------------------- facts
+# facts
 
 def _date(s):
     return _dt.date.fromisoformat(s)
@@ -333,7 +333,7 @@ def changes(result):
     return out
 
 
-# ---------------------------------------------------------------- filings
+# filings
 
 EXHIBIT_RANK = [r"ex(?:hibit)?[-_]?99[-_.]?0?1(?!\d)", r"ex(?:hibit)?[-_]?99",
                 r"earnings|release|press", r"ex(?:hibit)?[-_]?\d"]
@@ -381,7 +381,7 @@ def latest_filings(submissions, cik, fetcher=None):
     return out
 
 
-# ---------------------------------------------------------------- output
+# output
 
 def _m(v):
     if v is None:

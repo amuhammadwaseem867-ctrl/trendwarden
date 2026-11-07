@@ -77,7 +77,7 @@ class NewsError(Exception):
     pass
 
 
-# ---------------------------------------------------------------- inputs
+# inputs
 
 def load_json(path):
     if path and os.path.isfile(path):
@@ -111,7 +111,7 @@ def sec_user_agent(cli=None, config="trader/config.json"):
     return ua
 
 
-# ---------------------------------------------------------------- fetching
+# fetching
 
 class Fetcher(object):
     def __init__(self, sec_ua=None, offline=None, pause=0.15):
@@ -162,7 +162,7 @@ def cik_map(fetcher, state):
     return cached
 
 
-# ---------------------------------------------------------------- parsing
+# parsing
 
 def _local(tag):
     return tag.rsplit("}", 1)[-1]
@@ -296,7 +296,7 @@ def fingerprint(it):
     return hashlib.sha1(it["id"].encode("utf-8")).hexdigest()[:16]
 
 
-# ---------------------------------------------------------------- the check
+# the check
 
 def collect(fetcher, watch, state, sec=True, forms=("8-K",), count=10, errors=None):
     errors = [] if errors is None else errors

@@ -250,7 +250,7 @@ class MT5Broker:
             raise SystemExit("Algo Trading is switched OFF in the MT5 terminal. "
                              "Click the 'Algo Trading' button in the toolbar so it turns green.")
 
-    # ----- account -------------------------------------------------------
+    # account
     def account_equity(self) -> float:
         return float(self.mt5.account_info().equity)
 
@@ -259,7 +259,7 @@ class MT5Broker:
         a = self.mt5.account_info()
         return float(a.margin_free) * float(a.leverage or 1)
 
-    # ----- helpers -------------------------------------------------------
+    # helpers
     def _position(self, symbol: str):
         for p in self.mt5.positions_get(symbol=symbol) or ():
             if p.magic == self.magic:
@@ -303,7 +303,7 @@ class MT5Broker:
     def _price_ok(self, info, price: float) -> float:
         return round(price, int(info.digits))
 
-    # ----- orders --------------------------------------------------------
+    # orders
     def buy(self, symbol: str, qty: float, price: float, sl: float | None = None,
             tp: float | None = None) -> Fill | None:
         info = ensure_symbol(self.mt5, symbol)

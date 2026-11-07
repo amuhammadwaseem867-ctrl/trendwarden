@@ -81,7 +81,7 @@ class EdgarError(Exception):
     pass
 
 
-# ---------------------------------------------------------------- fetching
+# fetching
 
 def user_agent(cli=None, config_path="trader/config.json"):
     """The SEC User-Agent from the flag, the environment or the config, or None."""
@@ -174,7 +174,7 @@ class Fetcher(object):
             raise EdgarError("%s did not return JSON: %s" % (url, exc))
 
 
-# ---------------------------------------------------------------- filers
+# filers
 
 def cik10(value):
     digits = re.sub(r"\D", "", str(value))
@@ -213,7 +213,7 @@ def search_sec(fetcher, query):
     return out
 
 
-# ---------------------------------------------------------------- filings
+# filings
 
 def list_filings(submissions, forms=FORMS):
     """13F filings from a submissions JSON, newest filing first."""
@@ -283,7 +283,7 @@ def value_multiplier(filed):
     return 1 if d >= DOLLARS_FROM else 1000
 
 
-# ---------------------------------------------------------------- parsing
+# parsing
 
 def _local(tag):
     return tag.rsplit("}", 1)[-1]
@@ -403,7 +403,7 @@ def combine_classes(positions, total):
     return out
 
 
-# ---------------------------------------------------------------- tickers
+# tickers
 
 SUFFIX_STATE = re.compile(r"\s*/\s*[A-Z]{2,5}\s*/?\s*$")
 ABBREV = {
@@ -595,7 +595,7 @@ def resolve_tickers(positions, index=None, overrides=None, figi=None):
     return positions
 
 
-# ---------------------------------------------------------------- analysis
+# analysis
 
 def diff(current, prior):
     """Compare two quarters by CUSIP: NEW, SOLD OUT, ADDED, TRIMMED, UNCHANGED."""
@@ -684,7 +684,7 @@ CAVEATS = [
 ]
 
 
-# ---------------------------------------------------------------- output
+# output
 
 def _money(v):
     return "${:,.0f}".format(v)
@@ -756,7 +756,7 @@ def render_diff(meta, rows):
     return "\n".join(out) + "\n"
 
 
-# ---------------------------------------------------------------- the flow
+# the flow
 
 def load_quarter(fetcher, cik, period=None, accession=None, before=None):
     """Download and parse one quarter. Returns (meta, rows, filings)."""

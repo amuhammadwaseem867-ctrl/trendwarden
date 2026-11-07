@@ -86,7 +86,7 @@ class AlertError(Exception):
     pass
 
 
-# ---------------------------------------------------------------- time
+# time
 
 def _nth_sunday(year, month, n):
     d = datetime.date(year, month, 1)
@@ -177,7 +177,7 @@ def market_status(now_utc):
     return st
 
 
-# ---------------------------------------------------------------- quotes
+# quotes
 
 def stooq_url(sym):
     return "https://stooq.com/q/l/?s=%s.us&f=sd2t2ohlcv&h&e=csv" % sym.lower().replace(".", "-")
@@ -306,7 +306,7 @@ def _read(path, default):
         raise AlertError("%s is not valid JSON: %s" % (path, e))
 
 
-# ---------------------------------------------------------------- rules
+# rules
 
 PRICE_TYPES = {"above", "below", "stop", "target", "pct_move", "opening_bell"}
 
@@ -376,7 +376,7 @@ def _n(x):
     return str(int(x)) if x == int(x) else "%.2f" % x
 
 
-# ---------------------------------------------------------------- commands
+# commands
 
 def holdings(a):
     syms = []

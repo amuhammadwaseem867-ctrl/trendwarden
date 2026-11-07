@@ -48,7 +48,7 @@ class ScreenError(Exception):
     pass
 
 
-# ---------------------------------------------------------------- inputs
+# inputs
 
 def to_number(v):
     if isinstance(v, bool) or v is None:
@@ -139,7 +139,7 @@ def check_rules(spec):
         raise ScreenError("missing must be \"fail\" or \"skip\"")
 
 
-# ---------------------------------------------------------------- screening
+# screening
 
 def _fmt(v):
     if isinstance(v, float):
@@ -229,7 +229,7 @@ def rank(results, keys):
         r["rank_gaps"] = [k["metric"] for k in keys if k["metric"] not in parts]
 
 
-# ---------------------------------------------------------------- output
+# output
 
 def render(results, spec, top=None, prices_as_of=None):
     name = spec.get("name") or "screen"

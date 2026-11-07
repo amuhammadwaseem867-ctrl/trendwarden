@@ -40,7 +40,7 @@ class Trader:
         self.entry_block: str | None = None  # set by the news guard / smart-money filter
         self.notify = notify or (lambda msg: None)
 
-    # ----- accounting ----------------------------------------------------
+    # accounting
     def equity(self, prices: dict[str, float]) -> float:
         if hasattr(self.broker, "account_equity"):  # live margin accounts (MT5) report equity directly
             return self.broker.account_equity()
@@ -49,7 +49,7 @@ class Trader:
         value = sum(p.qty * prices.get(s, p.entry_price) for s, p in self.positions.items())
         return self.broker.get_cash() + value
 
-    # ----- orders --------------------------------------------------------
+    # orders
     def open(self, symbol: str, price: float, atr: float, ts: str, prices: dict[str, float]) -> None:
         if self.entry_block:
             log.info("%s %s: entry signal skipped (%s)", ts, symbol, self.entry_block)
@@ -135,7 +135,7 @@ class Trader:
         for symbol in list(self.positions):
             self.close(symbol, prices[symbol], ts, reason)
 
-    # ----- per-bar logic -------------------------------------------------
+    # per-bar logic
     def on_bar(self, symbol: str, bar: pd.Series, ts: str, prices: dict[str, float]) -> None:
         """Process one *closed* bar for one symbol. `bar` must include the
         strategy columns (entry, exit, atr)."""
