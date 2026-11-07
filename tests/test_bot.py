@@ -18,7 +18,7 @@ def df():
     return synthetic_ohlcv(n=2500, seed=3)
 
 
-# ---------------------------------------------------------------- indicators
+# indicators
 def test_rsi_bounds(df):
     r = ta.rsi(df["close"]).dropna()
     assert len(r) and r.between(0, 100).all()
@@ -33,7 +33,7 @@ def test_donchian_excludes_current_bar(df):
     assert upper.iloc[100] == df["high"].iloc[80:100].max()
 
 
-# ---------------------------------------------------------------- risk
+# risk
 def test_size_risks_configured_fraction():
     rm = RiskManager(RiskConfig(risk_per_trade_pct=1.0, atr_stop_mult=2.0, max_position_pct=100))
     qty = rm.size(equity=10_000, cash=10_000, price=100, atr=2.5, fee_rate=0.0)
@@ -70,7 +70,7 @@ def test_kill_switch_and_daily_limit():
     assert rm.can_open("X", 8_900, 0)[0] is False
 
 
-# ---------------------------------------------------------------- backtest
+# backtest
 @pytest.mark.parametrize("name", list(STRATEGIES))
 def test_backtest_runs_and_accounts_cleanly(df, name):
     res = run_backtest({"A/USDT": df}, name, {}, RiskConfig(), "1h", 10_000, 0.001, 0.0005)
@@ -122,7 +122,7 @@ def test_sim_broker_fees():
     assert b.cash == pytest.approx(495 + 550 - 5.5)
 
 
-# ---------------------------------------------------------------- engine (paper) with a fake exchange
+# engine (paper) with a fake exchange
 class FakeExchange:
     id = "fake"
     rateLimit = 0
@@ -170,7 +170,7 @@ def test_paper_engine_runs_and_resumes(tmp_path, monkeypatch, df):
     assert e2.last_bar == e.last_bar
 
 
-# ---------------------------------------------------------------- small accounts / margin
+# small accounts / margin
 def test_margin_broker_accounting():
     b = SimBroker(80, fee_rate=0.0, slippage_rate=0.0, leverage=100, min_qty=1, qty_step=1)
     f = b.buy("GOLD", 1.7, 2400)              # rounds down to 1 oz; margin 24
@@ -213,7 +213,7 @@ def test_small_account_backtest_accounts_cleanly():
     assert res.metrics["final_equity"] == pytest.approx(80 + res.trades.pnl.sum(), abs=0.01)
 
 
-# ---------------------------------------------------------------- new strategies / discovery
+# new strategies / discovery
 def test_supertrend_follows_trend():
     idx = pd.date_range("2024-01-01", periods=300, freq="1h", tz="UTC")
     up = np.linspace(100, 200, 150)

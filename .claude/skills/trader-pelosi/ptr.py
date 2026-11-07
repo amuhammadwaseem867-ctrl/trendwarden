@@ -63,7 +63,7 @@ class PtrError(Exception):
     pass
 
 
-# ---------------------------------------------------------------- the index
+# the index
 
 def iso(mdy):
     """'8/21/2026' or '08/21/2026' -> '2026-08-21' (two-digit years -> 20xx)."""
@@ -161,7 +161,7 @@ def select(rows, members=None, kind="P", since=None):
     return out
 
 
-# ---------------------------------------------------------------- state
+# state
 
 def load_state(path):
     if path and os.path.isfile(path):
@@ -189,7 +189,7 @@ def new_since(rows, state, today, first_days=LATE_DAYS):
     return [r for r in rows if r["doc_id"] not in seen]
 
 
-# ---------------------------------------------------------------- parsing a PTR
+# parsing a PTR
 
 TXN = re.compile(
     r"^\s*(?:(?P<owner>SP|JT|DC)\s+)?(?P<asset>.*?)\s+(?P<type>S \(partial\)|P|S|E)\s+"
@@ -345,7 +345,7 @@ def pdf_to_text(pdf_path):
     return out.stdout.decode("utf-8", "replace") if out.returncode == 0 else None
 
 
-# ---------------------------------------------------------------- output
+# output
 
 def watchlist(args):
     tickers = {t.upper() for t in (args.tickers or [])}
@@ -406,7 +406,7 @@ def render_index(rows):
     return "\n".join(out) + ("\n" if out else "")
 
 
-# ---------------------------------------------------------------- CLI
+# CLI
 
 def _parser():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])

@@ -95,7 +95,7 @@ class NewsGuard:
         self._seen: set[str] = set()
         self._was_paused = False
 
-    # ----- scheduled events ---------------------------------------------
+    # scheduled events
     def events_between(self, start: datetime, end: datetime) -> list[tuple[datetime, str]]:
         """Scheduled events (UTC) in [start, end]."""
         out = []
@@ -146,7 +146,7 @@ class NewsGuard:
 
         return check
 
-    # ----- headlines ------------------------------------------------------
+    # headlines
     def poll_headlines(self, now: datetime) -> None:
         if not self.cfg.headlines:
             return
@@ -181,7 +181,7 @@ class NewsGuard:
             return self._headline_reason
         return None
 
-    # ----- combined -------------------------------------------------------
+    # combined
     def block_reason(self, now: datetime) -> str | None:
         if not self.cfg.enabled:
             return None

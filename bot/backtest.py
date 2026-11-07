@@ -142,9 +142,7 @@ def buy_and_hold(prepared: dict[str, pd.DataFrame], timeline: list, timeframe: s
     }
 
 
-# ----------------------------------------------------------------------------
 # Walk-forward optimisation
-# ----------------------------------------------------------------------------
 def score(metrics: dict, min_trades: int) -> float:
     """Rank by risk-adjusted return; reject configs with too few trades to trust."""
     if metrics.get("trades", 0) < min_trades:
@@ -190,9 +188,7 @@ def optimise(data: dict[str, pd.DataFrame], strategy_name: str, grid: dict[str, 
     return pd.DataFrame(report)
 
 
-# ----------------------------------------------------------------------------
 # Walk-forward strategy discovery
-# ----------------------------------------------------------------------------
 @dataclass
 class WalkForwardResult:
     strategy: str

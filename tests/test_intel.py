@@ -20,7 +20,7 @@ from bot.trader import Trader
 UTC = timezone.utc
 
 
-# ---------------------------------------------------------------- news guard
+# news guard
 def test_first_friday():
     assert first_friday(2026, 11) == date(2026, 11, 6)
     assert first_friday(2026, 5) == date(2026, 5, 1)
@@ -92,7 +92,7 @@ def test_intel_config_parsing():
     assert not Intel(parse(None), "state").active
 
 
-# ---------------------------------------------------------------- smart money
+# smart money
 def _row(issuer, title, shares, cusip):
     return {"issuer": issuer, "title": title, "cusip": cusip, "figi": "", "put_call": "", "share_type": "SH",
             "value": shares * 200.0, "shares": float(shares)}
@@ -140,7 +140,7 @@ def test_smart_money_fetch_and_filter(monkeypatch, tmp_path):
     assert s.block_reason() is None
 
 
-# ---------------------------------------------------------------- congress
+# congress
 def test_congress_alerts_on_gold_trades(monkeypatch, tmp_path):
     ptr = load("trader-pelosi", "ptr")
     index = [{"doc_id": "1", "type": "P", "name": "Hon. A", "last": "A", "first": "", "year": 2026,
@@ -169,7 +169,7 @@ def test_congress_without_pdftotext(monkeypatch, tmp_path):
     assert cg.CongressWatch(cg.CongressConfig(enabled=True), str(tmp_path)).check(datetime(2026, 11, 3, tzinfo=UTC)) == []
 
 
-# ---------------------------------------------------------------- stock copy-trading
+# stock copy-trading
 class FakeAlpaca:
     paper = True
 

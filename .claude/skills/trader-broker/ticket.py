@@ -53,7 +53,7 @@ class TicketError(Exception):
     pass
 
 
-# ---------------------------------------------------------------- files
+# files
 
 def read_json(path, what, required=True):
     if not path or not os.path.exists(path):
@@ -87,7 +87,7 @@ def rec_day(rec):
     return str(rec.get("date") or str(rec.get("at", ""))[:10])
 
 
-# ---------------------------------------------------------------- the order
+# the order
 
 def fingerprint(order):
     """Same function as trader-risk/check.py: identifies the exact order."""
@@ -183,7 +183,7 @@ def parse_yes(reply, order, batch_symbols=()):
     return True, "explicit yes for %s" % plain(order)
 
 
-# ---------------------------------------------------------------- state
+# state
 
 def load_state(path):
     return read_json(path, "broker state", required=False) or {"orders": []}
@@ -226,7 +226,7 @@ def status_of(order, risk, state, today):
     return True, "READY: trader-risk PASS, waiting for your yes", rv
 
 
-# ---------------------------------------------------------------- rendering
+# rendering
 
 def render(order, idx, total, cfg, risk, state, today):
     ready, label, rv = status_of(order, risk, state, today)
@@ -262,7 +262,7 @@ def ticket_json(order, idx, cfg, risk, state, today):
             "tool_input": tool_input(order), "why": order.get("why", "")}
 
 
-# ---------------------------------------------------------------- fills -> lots
+# fills -> lots
 
 def apply_fill(portfolio_path, cfg, symbol, side, qty, price, date):
     """Record a filled order in trader/portfolio.json (a lot for a buy, FIFO for a sell)."""
@@ -309,7 +309,7 @@ def apply_fill(portfolio_path, cfg, symbol, side, qty, price, date):
     return pf
 
 
-# ---------------------------------------------------------------- commands
+# commands
 
 def _load(a):
     doc = read_json(a.orders, "orders file (run trader-budget, trader-rebalance or trader-tax first)")

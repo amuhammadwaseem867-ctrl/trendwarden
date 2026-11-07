@@ -96,7 +96,7 @@ def family(ticker):
     return {t}
 
 
-# ---------------------------------------------------------------- lots
+# lots
 
 def lots_of(portfolio):
     """{ticker: [lot, ...]} with id, date (date), shares, cost, per_share; oldest first."""
@@ -211,7 +211,7 @@ def simulate_sale(lots, shares, price, sold, method="fifo", ids=None):
     return res
 
 
-# ---------------------------------------------------------------- wash sales
+# wash sales
 
 def planned_buys(orders, prices):
     out = []
@@ -281,7 +281,7 @@ def rebuy_date(sold):
     return (sold + datetime.timedelta(days=31)).isoformat()
 
 
-# ---------------------------------------------------------------- harvest
+# harvest
 
 def harvest(portfolio, prices, today, min_loss=100.0, min_pct=0.0, orders=None):
     cands = []
@@ -329,7 +329,7 @@ def harvest_orders(cands, include_wash=False):
     return out
 
 
-# ---------------------------------------------------------------- record a sale
+# record a sale
 
 def record_sale(portfolio, ticker, sale, sold, price, state):
     t = ticker.upper()
@@ -371,7 +371,7 @@ def realized_ytd(state, year):
     return {k: (round(v, 2) if isinstance(v, float) else v) for k, v in out.items()}
 
 
-# ---------------------------------------------------------------- CLI
+# CLI
 
 NOT_ADVICE = ("Not tax advice: arithmetic on your lots. Wash-sale rules also count buys in your IRA, "
               "your spouse's accounts and other brokers, which this tool cannot see. Check with a tax "
